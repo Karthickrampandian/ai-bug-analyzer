@@ -1,5 +1,7 @@
 import streamlit as st
 from bug_analyser import BugAnalyser
+import pandas as pd
+from JIRA_Report import JIRA_REPORT
 
 class bug_app:
 
@@ -8,20 +10,45 @@ class bug_app:
 
     def run(self):
 
-        global result
+        global result, solution
         st.title("Bug Analyzer")
 
-        bug_input = st.text_area("Bug Description", height=150)
+        bug_input = st.date_input("Select Report date")
+        mode = st.radio("If file exists:", ["Append", "Overwrite"])
 
-        clicked = st.button("Verify Bug report")
-
-        if clicked:
-            if bug_input.strip() == "":
-                st.error("Bug Reported Error")
-            else:
+        if st.button("Verify Bug report"):
+            with st.spinner("Claude is analyzing your bugs... please wait"):
                 result = self.analyser.claude_connect(bug_input)
-                st.write("Please find the results : " )
-                st.write(result)
+
+            rows = []
+            for bug_ID, solution in result.items():
+                with st.expander(f"{bug_ID} - {solution.get('title', '')}"):
+                    col1,col2, col3 = st.columns(3)
+                    col1.metric("Severity",solution.get("severity", ""))
+                    col2.metric("Priority",solution.get("priority", ""))
+                    col3.markdown(f"**Component**\n\n {solution.get('component', '')}")
+                    st.markdown("**Suggestion:**")
+                    suggestions = solution.get("suggestion",[])
+                    if isinstance(suggestions,list):
+                         for s in suggestions:
+                             st.markdown(f"- {s}")
+                    else:
+                        st.write(suggestions)
+                #Build rows for export - OUTSIDE expander
+                if isinstance(solution, dict):
+                    solution["bugID"] = bug_ID
+                    rows.append(solution)
+            if rows:
+                bugtable = pd.DataFrame(rows)
+                st.session_state["bugtable"] = bugtable
+            else:
+                st.write("Error:", solution)
+
+        if "bugtable" in st.session_state:
+            if st.button("Generate Bug report"):
+                jira = JIRA_REPORT(st.session_state["bugtable"], bug_input, mode)
+                jira.report()
+                st.success("Report generated successfully")
 
 run = bug_app()
 run.run()

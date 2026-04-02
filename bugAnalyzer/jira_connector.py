@@ -1,11 +1,13 @@
 import os
 import requests
 from requests.auth import HTTPBasicAuth
+import streamlit as st
+
 class jira_connector:
     def __init__(self):
-        self.url = os.environ.get("JIRA_URL")
-        self.email = os.environ.get("JIRA_EMAIL")
-        self.token = os.environ.get("JIRA_TOKEN")
+        self.url = st.secrets.get("JIRA_URL") or os.environ.get("JIRA_URL")
+        self.email = st.secrets.get("JIRA_EMAIL") or os.environ.get("JIRA_EMAIL")
+        self.token = st.secrets.get("JIRA_TOKEN") or os.environ.get("JIRA_TOKEN")
 
     def jira_connect(self):
         auth = HTTPBasicAuth(self.email, self.token)

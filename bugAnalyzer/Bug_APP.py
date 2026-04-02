@@ -52,10 +52,13 @@ class bug_app:
                 st.write("Error:", solution)
 
         if "bugtable" in st.session_state:
-            if st.button("Generate Bug report"):
-                jira = JIRA_REPORT(st.session_state["bugtable"], bug_input, mode)
-                jira.report()
-                st.success("Report generated successfully")
+            csv  = st.session_state["bugtable"].to_csv(index=False)
+            st.download_button(
+                label="⬇️ Download Bug Report",
+                data=csv,
+                file_name=f"bug_report_{bug_input}.csv",
+                mime="text/csv"
+            )
 
 run = bug_app()
 run.run()

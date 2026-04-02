@@ -2,7 +2,7 @@ import anthropic
 import os
 import json
 import pandas as pd
-from jira_Test  import jira_connector
+from jira_connector  import jira_connector
 class BugAnalyser:
 
     def load_bug_Report(self):

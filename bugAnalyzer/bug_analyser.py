@@ -3,6 +3,8 @@ import os
 import json
 import pandas as pd
 from jira_connector  import jira_connector
+import chromadb
+
 class BugAnalyser:
 
     def load_bug_Report(self):
@@ -33,6 +35,8 @@ class BugAnalyser:
         Ensure to review the report properly before rushing to the conclusion, ensure all the bugs were addressed properly.
         Ensure to revert the output back in json format only and dont add any additional information or details apart from 
         the bug report."""
+        self.chroma = chromadb.PersistentClient(path="./bug_vector")
+        self.collection = self.chroma.get_or_create_collection("bug_history")
 
         # self.user_prompt = """Consider yourself as a LEAD QA consultant. Help with to categorise the below bug using these fields,
         #         [
@@ -59,6 +63,15 @@ class BugAnalyser:
         bug = jira_connector()
         bug_list = bug.get_bugs()
         for bug,summary in bug_list.items():
+            similar = self.collection.query(query_texts=[summary],n_results=2)
+            similar_bugs = similar["documents"][0] if similar ["documents"][0] else []
+            context = ""
+            if similar_bugs:
+                context="\n\nSimilar past bugs for referenc:\n"
+                context += "\n" .join(f"- {b}" for b in similar_bugs)
+                print(f"Similar bugs found: {similar_bugs}")
+            else:
+                print("No similar bugs yet — first run")
             message = client.messages.create(
                     model=self.claude_model,
                     max_tokens=self.tokens,
@@ -66,7 +79,7 @@ class BugAnalyser:
                     messages=
                     [{
                         "role": "user",
-                        "content": summary
+                        "content": summary + context
                     }]
                 )
 
@@ -81,6 +94,15 @@ class BugAnalyser:
             final_result = {
                  field: result.get(field.lower(),"N/A")
                 for field in self.bug_details}
+            # Add similar bugs BEFORE adding to all_bugs
+            final_result["similar_bugs"] = similar_bugs
+
+            self.collection.upsert(
+                documents = [summary],
+                metadatas = [{"severity": final_result.get("severity", ""),
+                             "component": final_result.get("component", "")}],
+                ids = [bug]
+            )
             all_bugs[bug] = final_result
         return all_bugs
 

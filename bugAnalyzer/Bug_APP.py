@@ -23,6 +23,12 @@ class bug_app:
             rows = []
             for bug_ID, solution in result.items():
                 with st.expander(f"{bug_ID} - {solution.get('title', '')}"):
+                    similar = solution.get("similar_bugs", [])
+                    if similar:
+                        st.markdown("**🔍 Similar Past Bugs:**")
+                        for s in similar:
+                            st.markdown(f"- {s}")
+
                     col1,col2, col3 = st.columns(3)
                     col1.metric("Severity",solution.get("severity", ""))
                     col2.metric("Priority",solution.get("priority", ""))
@@ -42,12 +48,12 @@ class bug_app:
                 bugtable = pd.DataFrame(rows)
                 st.session_state["bugtable"] = bugtable
 
-                csv = bugtable.to_csv(index=False)
-                st.download_button(
-                    label="Download Bug Report",
-                    data=csv,
-                    file_name=f"bug_report_{bug_input}.csv",
-                    mime="text/csv")
+                # csv = bugtable.to_csv(index=False)
+                # st.download_button(
+                #     label="Download Bug Report",
+                #     data=csv,
+                #     file_name=f"bug_report_{bug_input}.csv",
+                #     mime="text/csv")
             else:
                 st.write("Error:", solution)
 

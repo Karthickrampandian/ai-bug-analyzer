@@ -38,15 +38,6 @@ class BugAnalyser:
         self.chroma = chromadb.PersistentClient(path="./bug_vector")
         self.collection = self.chroma.get_or_create_collection("bug_history")
 
-        # self.user_prompt = """Consider yourself as a LEAD QA consultant. Help with to categorise the below bug using these fields,
-        #         [
-        #         "severity":"Critical/High/Medium/Low",
-        #         "priority":"P0/P1/P2/P3",
-        #         "component":"Which part of the app is affected",
-        #         "suggestion": "one clear fix direction",
-        #         "title":"What can be the title of the bug"
-        #         ]
-        #         Ensure to revert back in json format only. No unwanted explanations."""
         self.bug_details = {
             "severity": "",
             "priority": "",
@@ -94,6 +85,7 @@ class BugAnalyser:
             final_result = {
                  field: result.get(field.lower(),"N/A")
                 for field in self.bug_details}
+
             # Add similar bugs BEFORE adding to all_bugs
             final_result["similar_bugs"] = similar_bugs
 

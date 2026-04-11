@@ -1,15 +1,23 @@
 # AI Bug Analyzer
 
-Automatically analyze Jira bug reports using Claude AI.
+AI-powered Jira bug analysis using Claude AI with RAG pipeline.
 
 ## What it does
-- Connects to your Jira project
-- Sends each bug to Claude for analysis
+- Connects to Jira and fetches bugs automatically
+- Searches ChromaDB for similar past bugs (RAG)
+- Sends each bug to Claude with historical context
 - Returns severity, priority, component and fix suggestions
-- Exports dated CSV report
+- Shows similar past bugs in UI for reference
+- CSV download button
 
 ## Tech Stack
-Python · Claude API · Streamlit · Jira REST API · Pandas
+Python · Claude API · Streamlit · Jira REST API · ChromaDB · LangChain
+
+## Branches
+- main — RAG version with ChromaDB
+- feature/basic — Basic version, no RAG
+- feature/langgraph-agent — LangGraph agent version
+- feature/tool-use — Tool use examples
 
 ## How to run
 1. Set environment variables: ANTHROPIC_API_KEY, JIRA_URL, JIRA_EMAIL, JIRA_TOKEN
@@ -17,4 +25,4 @@ Python · Claude API · Streamlit · Jira REST API · Pandas
 3. python3 -m streamlit run bugAnalyzer/Bug_APP.py
 
 ## Built by
-Karthick Ram Pandian — Senior QA Automation Engineer
+Karthick Ram Pandian — Senior QA Automation Engineer transitioning to AI Engineering

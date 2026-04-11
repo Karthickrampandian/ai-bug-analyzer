@@ -5,5 +5,12 @@ __pycache__/
 .env
 bugfile/
 *.csv
-bugfile/
 TrendTrader/
+bug_vector/
+TrendTrader_backup_20260403/
+bugAnalyzer_backup/
+promptEngineering/
+learning.py
+*.session
+*.log
+executed_signals.json

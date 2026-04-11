@@ -48,14 +48,8 @@ class bug_app:
                 bugtable = pd.DataFrame(rows)
                 st.session_state["bugtable"] = bugtable
 
-                # csv = bugtable.to_csv(index=False)
-                # st.download_button(
-                #     label="Download Bug Report",
-                #     data=csv,
-                #     file_name=f"bug_report_{bug_input}.csv",
-                #     mime="text/csv")
             else:
-                st.write("Error:", solution)
+                st.write("Error processing bug")
 
         if "bugtable" in st.session_state:
             csv  = st.session_state["bugtable"].to_csv(index=False)

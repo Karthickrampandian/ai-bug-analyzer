@@ -1,0 +1,10 @@
+*.db
+*.db-shm
+*.db-wal
+bug_vector/
+__pycache__/
+.env
+.devcontainer/
+*.sqlite3
+TrendTrader_backup_20260403/
+bugAnalyzer_backup/

@@ -2,6 +2,7 @@ import anthropic
 import chromadb
 import os
 
+
 class MiniRag():
     def __init__(self):
         self.api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -32,16 +33,23 @@ class MiniRag():
             ids= ["bug_1", "bug_2", "bug_3","bug_4","bug_5"],
         )
 
-
-    def query_bug(self):
-
+# Login selection is failing only for preofessor accounts but working for students
+    def query_and_score(self):
         similar_bugs = self.collection.query(query_texts=[self.question], n_results = 2)
-        print(similar_bugs)
-        return similar_bugs
+        distance = similar_bugs["distances"][0]
+        top_distance = distance[0]
+        if top_distance > 1.0:
+            confidence = "low"
+        elif top_distance > 0.5:
+            confidence = "medium"
+        else:
+            confidence = "high"
+        return confidence,similar_bugs
 
     def claude_connect(self):
-
-        context_summary = f"Here are similar bugs: {self.query_bug()}. User's new bug: {self.question}. Analyze if this is a duplicate or new."
+        confidence_level,similar_bug = self.query_and_score()
+        context_summary = f"Here are similar bugs: {similar_bug}. User's new bug: {self.question}. Analyze if this is a duplicate or new. Also confidence level of this bug against existing chromaDB: {confidence_level}"
+        print(f"Content input:{context_summary}")
         response = self.llm.messages.create(
             model = self.model,
             max_tokens = self.max_tokens,

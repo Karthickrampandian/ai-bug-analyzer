@@ -47,6 +47,9 @@ class Cucumber_Generation():
             return f.read()
 
     def generate_feature(self,ticket,summary):
+        if os.path.exists(f"features/{ticket}.feature"):
+            print(f"{ticket} already exists, skipping")
+            return
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
@@ -57,6 +60,9 @@ class Cucumber_Generation():
         self.write_feature(self.feature,result,ticket)
 
     def generate_stepdefinitions(self,ticket):
+        if os.path.exists(f"step_definitions/{ticket}.kt"):
+            print(f"{ticket} already exists, skipping")
+            return
         response = self.client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,

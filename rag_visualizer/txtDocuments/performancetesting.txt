@@ -1,0 +1,17 @@
+Performance Testing Overview
+
+Performance testing evaluates how a system behaves under load and stress. It ensures the application is stable, fast, and scalable.
+
+Types of performance testing:
+- Load Testing: Checks system behavior under expected user load.
+- Stress Testing: Pushes the system beyond limits to find breaking points.
+- Spike Testing: Tests reaction to sudden increases in load.
+- Endurance Testing: Measures performance over long periods.
+
+Key metrics:
+- Response Time: Time taken to process a request.
+- Throughput: Number of requests handled per second.
+- Latency: Delay before a request is processed.
+
+Example:
+A web app should handle 1000 concurrent users without slowing down significantly.

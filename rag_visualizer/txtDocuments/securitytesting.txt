@@ -1,0 +1,17 @@
+Security Testing Overview
+
+Security testing is a type of software testing that identifies vulnerabilities, threats, and risks in a system. Its goal is to ensure that data and resources are protected from unauthorized access.
+
+Common types of security testing include:
+- Vulnerability Scanning: Automated tools scan systems for known weaknesses.
+- Penetration Testing: Ethical hackers simulate attacks to exploit vulnerabilities.
+- Security Auditing: Reviewing code and configurations for security issues.
+- Risk Assessment: Identifying potential risks and their impact.
+
+Key concepts:
+- Authentication: Verifying user identity.
+- Authorization: Controlling access to resources.
+- Encryption: Protecting data using cryptographic methods.
+
+Example:
+A login system should prevent SQL injection and enforce strong password policies.

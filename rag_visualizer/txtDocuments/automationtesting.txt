@@ -1,0 +1,21 @@
+Automation Testing Overview
+
+Automation testing uses tools and scripts to execute tests automatically. It reduces manual effort and improves consistency.
+
+Benefits:
+- Faster execution of repetitive tests
+- Increased test coverage
+- Reduced human error
+
+Common tools:
+- Selenium: Web application testing
+- Cypress: Frontend testing
+- Playwright: Modern browser automation
+
+Best practices:
+- Use stable selectors (avoid fragile locators)
+- Keep tests independent
+- Maintain readable test scripts
+
+Example:
+A script automatically logs into a website and verifies the dashboard loads correctly.

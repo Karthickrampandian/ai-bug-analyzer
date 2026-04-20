@@ -1,0 +1,22 @@
+API Testing Overview
+
+API testing focuses on validating application programming interfaces (APIs). It ensures that endpoints return correct responses and handle requests properly.
+
+Common checks:
+- Status codes (e.g., 200, 404, 500)
+- Response structure and schema
+- Data accuracy
+- Authentication and authorization
+
+Types of API testing:
+- Functional Testing: Verifies expected behavior
+- Load Testing: Measures performance under traffic
+- Security Testing: Ensures APIs are protected
+
+Tools:
+- Postman
+- REST Assured
+- Insomnia
+
+Example:
+A GET request to /users should return a list of users in JSON format with a 200 status code.

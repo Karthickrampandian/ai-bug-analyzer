@@ -1,7 +1,6 @@
 import streamlit as st
 from bug_analyser import BugAnalyser
 import pandas as pd
-from JIRA_Report import JIRA_REPORT
 
 class bug_app:
 
@@ -40,6 +39,16 @@ class bug_app:
                              st.markdown(f"- {s}")
                     else:
                         st.write(suggestions)
+
+                    code_analysis = solution.get("code_analysis", "")
+                    if code_analysis:
+                        st.markdown("**🔍 Code Analysis:**")
+                        st.markdown(code_analysis)
+                    matched_files = solution.get("matched_files", [])
+                    if matched_files:
+                        st.markdown("**📁 Files Analyzed:**")
+                        for f in matched_files:
+                            st.code(f)
                 #Build rows for export - OUTSIDE expander
                 if isinstance(solution, dict):
                     solution["bugID"] = bug_ID
@@ -55,7 +64,7 @@ class bug_app:
                 #     file_name=f"bug_report_{bug_input}.csv",
                 #     mime="text/csv")
             else:
-                st.write("Error:", solution)
+                st.warning("No bugs found.")
 
         if "bugtable" in st.session_state:
             csv  = st.session_state["bugtable"].to_csv(index=False)

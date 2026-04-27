@@ -1,9 +1,8 @@
 import os
+import json
 
 import anthropic
 import chromadb
-from anthropic import Anthropic
-
 
 class Generation:
     def __init__(self):
@@ -89,17 +88,48 @@ class Generation:
         print(f"Confidence: {confidence} (distance: {top_distance:.4f})")
         print(f"Response: {response.content[0].text}")
         answer = response.content[0].text
-        verification_prompt = self.llm.messages.create(
+        evaluation_response = self.analyse_response(question, context, answer)
+        print(f"Final Answer: {answer}")
+        print(f"Faithfullness: {evaluation_response.get('faithfulness')}")
+        print(f"Context Precision: {evaluation_response.get('context_precision')}")
+        print(f"Answer Relevance: {evaluation_response.get('context_relevance')}")
+        print(f"Reason: {evaluation_response.get('reason')}")
+
+    def analyse_response(self, question, context, answer):
+
+        eval_prompt = f""" You are a RAG evaluation expert.
+             Your task is to analyse the context provided and provide below details before analysing 
+             the context thoroughly before rushing to a conclusion. Score the following on a scale of 1-10.
+
+             question:{question}
+             context retrieved:{context}
+             Answer given:{answer}
+
+             Return only in JSON structure and avoid any other unwanted explanation.
+
+             {{
+                 "faithfulness":"Grounded or hallucinated",
+                 "context_precision": "Rate between 1 to 10, 1 = worst, 10 = best, based on the answers provided.",
+                 "context_relevance":"Rate between 1 to 10, 1 = worst, 10 = best, based on the answers provided.",
+                 "reason":"One reason why"
+             }}
+
+             """
+        response = self.llm.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            messages=[{
+            messages = [{
                 "role": "user",
-                "content":f"""Context:{context}\n\nAnswer given:{answer} Is this answer fully supportd by the context provided?
-                          Reply with only: GROUNDED or HALLUCINATED and one sentence why.""",
+                "content": eval_prompt
             }]
         )
-        answer = verification_prompt.content[0].text
-        print(f"Final Answer: {answer}")
+
+        raw_result = response.content[0].text.replace("```","").replace("json","")
+        try:
+            evaluation = json.loads(raw_result)
+            return evaluation
+        except json.JSONDecodeError:
+            return {"error": "evaluation failed"}
 
 file_generation = Generation()
 file_generation.read_files()

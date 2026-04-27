@@ -6,9 +6,9 @@ from jira_connector  import jira_connector
 import chromadb
 
 COMPONENT_FILE_MAP = {
-    "login": ["Login.js"],
-    "cart": ["CartButton.jsx", "HeaderContainer.jsx"],
-    "checkout": ["InputError.jsx"]
+    "login": ["Login.jsx"],
+    "cart": ["Cart.jsx","CartButton.jsx", "HeaderContainer.jsx"],
+    "checkout": ["CheckOutStepOne.jsx","InputError.jsx"]
 }
 
 SAUCEDEMO_PATH = "/Users/karthick/Desktop/Learn_Playwright/learningpython/sample-app-web/src"

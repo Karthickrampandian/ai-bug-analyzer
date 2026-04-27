@@ -1,12 +1,13 @@
 import os
 import json
-
+from pypdf import PdfReader
 import anthropic
 import chromadb
 
 class Generation:
     def __init__(self):
         self.txt_folder = "txtDocuments"
+        self.pdf_folder = "pdfDocuments"
         self.chroma = chromadb.PersistentClient(path="./chroma_db")
         self.collection = self.chroma.get_or_create_collection("rag_visualizer")
         self.api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -14,7 +15,7 @@ class Generation:
         self.model = "claude-haiku-4-5-20251001"
         self.max_tokens = 1048
 
-    def chunk_text(self, text, chunk_size=200, overlap=50):
+    def chunk_text(self, text, chunk_size=500, overlap=80):
         chunks = []
         start = 0
         while start < len(text):
@@ -25,7 +26,13 @@ class Generation:
         return chunks
 
     def read_files(self):
-        for filename in os.listdir(f"{self.txt_folder}"):
+        self.chroma.delete_collection("rag_visualizer")
+        self.collection = self.chroma.get_or_create_collection("rag_visualizer")
+        self.read_txt_files()
+        self.read_pdf_files()
+
+    def read_txt_files(self):
+        for filename in os.listdir(self.txt_folder):
             if filename.endswith(".txt"):
                 with open(f"{self.txt_folder}/{filename}", "r") as f:
                     content = f.read()
@@ -34,6 +41,17 @@ class Generation:
                 print(f"---{filename} - {len(chunks)} chunks ---")
                 for i, chunk in enumerate(chunks):
                     print(f"Chunk {i+1} ({len(chunk)} chars) : {chunk[:50]}")
+
+    def read_pdf_files(self):
+        for filename in os.listdir(self.pdf_folder):
+            if filename.endswith(".pdf"):
+                reader = PdfReader(f"{self.pdf_folder}/{filename}")
+                content = ""
+                for page in reader.pages:
+                    content += page.extract_text()
+                chunks = self.chunk_text(content)
+                self.store_chunks(filename, chunks)
+                print(f"---{filename} - {len(chunks)} chunks ---")
 
     def store_chunks(self, filename, chunks):
         existing = self.collection.get()["ids"]
@@ -96,7 +114,6 @@ class Generation:
         print(f"Reason: {evaluation_response.get('reason')}")
 
     def analyse_response(self, question, context, answer):
-
         eval_prompt = f""" You are a RAG evaluation expert.
              Your task is to analyse the context provided and provide below details before analysing 
              the context thoroughly before rushing to a conclusion. Score the following on a scale of 1-10.
@@ -135,3 +152,5 @@ file_generation = Generation()
 file_generation.read_files()
 file_generation.ask("How do you test API endpoints?")
 file_generation.ask("What is the best programming language for automation?")
+# file_generation.ask("What is the competance and acceptance level?")
+file_generation.ask("What are the requirements for information security risk assessment?")

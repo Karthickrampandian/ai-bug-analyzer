@@ -17,7 +17,7 @@ class Generation:
         self.model = "claude-haiku-4-5-20251001"
         self.max_tokens = 1048
 
-    def chunk_text(self, text,):
+    def chunk_text(self, text):
         chunks = []
         start = 0
         while start < len(text):
@@ -27,11 +27,14 @@ class Generation:
             print(f"{start} - {end} - {len(text)} - {self.overlap}")
         return chunks
 
-    def read_files(self):
-        self.chroma.delete_collection("rag_visualizer")
-        self.collection = self.chroma.get_or_create_collection("rag_visualizer")
+    def read_files(self,skip_pages = 0):
+        self.chroma.delete_collection(f"rag_{self.chunk_size}")
+        self.collection = self.chroma.get_or_create_collection(f"rag_{self.chunk_size}")
         self.read_txt_files()
-        self.read_pdf_files()
+        if skip_pages > 0:
+            self.read_pdf_with_metadata_filter(skip_pages)
+        else:
+            self.read_pdf_files()
 
     def read_txt_files(self):
         for filename in os.listdir(self.txt_folder):
@@ -54,6 +57,19 @@ class Generation:
                 chunks = self.chunk_text(content)
                 self.store_chunks(filename, chunks)
                 print(f"---{filename} - {len(chunks)} chunks ---")
+
+    def read_pdf_with_metadata_filter(self, skip_pages = 4):
+        for file in os.listdir(self.pdf_folder):
+            if file.endswith(".pdf"):
+                reader = PdfReader(f"{self.pdf_folder}/{file}")
+                content = ""
+                for page_num, page in enumerate(reader.pages):
+                    if page_num <= skip_pages:
+                        continue
+                    content += page.extract_text()
+                chunks = self.chunk_text(content)
+                self.store_chunks(file, chunks)
+
 
     def store_chunks(self, filename, chunks):
         existing = self.collection.get()["ids"]

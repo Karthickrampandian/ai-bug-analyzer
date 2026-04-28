@@ -8,3 +8,10 @@ __pycache__/
 *.sqlite3
 TrendTrader_backup_20260403/
 bugAnalyzer_backup/
+.DS_Store
+.idea/
+TrendTrader/
+sample-app-web/
+learning/
+promptEngineering/
+requirements.txt

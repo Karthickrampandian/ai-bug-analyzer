@@ -5,24 +5,26 @@ import anthropic
 import chromadb
 
 class Generation:
-    def __init__(self):
+    def __init__(self,chunk_size=500, overlap=80):
+        self.chunk_size = chunk_size
+        self.overlap = overlap
         self.txt_folder = "txtDocuments"
         self.pdf_folder = "pdfDocuments"
         self.chroma = chromadb.PersistentClient(path="./chroma_db")
-        self.collection = self.chroma.get_or_create_collection("rag_visualizer")
+        self.collection = self.chroma.get_or_create_collection(f"rag_{chunk_size}")
         self.api_key = os.environ.get("ANTHROPIC_API_KEY")
         self.llm = anthropic.Anthropic(api_key=self.api_key)
         self.model = "claude-haiku-4-5-20251001"
         self.max_tokens = 1048
 
-    def chunk_text(self, text, chunk_size=500, overlap=80):
+    def chunk_text(self, text,):
         chunks = []
         start = 0
         while start < len(text):
-            end = start + chunk_size
+            end = start + self.chunk_size
             chunks.append(text[start:end])
-            start = end - overlap
-            print(f"{start} - {end} - {len(text)} - {overlap}")
+            start = end - self.overlap
+            print(f"{start} - {end} - {len(text)} - {self.overlap}")
         return chunks
 
     def read_files(self):

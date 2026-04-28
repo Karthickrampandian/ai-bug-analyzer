@@ -84,7 +84,7 @@ class Generation:
 
     def ask(self, question):
         results = self.collection.query(
-            query_texts=[question], n_results=3, include=["documents", "distances"]
+            query_texts=[question], n_results=3, include=["documents", "distances", "metadatas"]
         )
 
         top_distance = results["distances"][0][0]
@@ -107,11 +107,21 @@ class Generation:
         print(f"Response: {response.content[0].text}")
         answer = response.content[0].text
         evaluation_response = self.analyse_response(question, context, answer)
-        print(f"Final Answer: {answer}")
-        print(f"Faithfullness: {evaluation_response.get('faithfulness')}")
-        print(f"Context Precision: {evaluation_response.get('context_precision')}")
-        print(f"Answer Relevance: {evaluation_response.get('context_relevance')}")
-        print(f"Reason: {evaluation_response.get('reason')}")
+        return {
+            "answer": answer,
+            "confidence": confidence,
+            "distance": top_distance,
+            "evaluation": evaluation_response,
+            "chunks":[
+                {
+                    "text":results["documents"][0][i],
+                    "distance":results["distances"][0][i],
+                    "source":results["metadatas"][0][i].get("source","unknown"),
+                    "chunk_number":results["metadatas"][0][i].get('chunk',i)
+                }
+                for i in range(len(results["documents"][0]))
+            ]
+        }
 
     def analyse_response(self, question, context, answer):
         eval_prompt = f""" You are a RAG evaluation expert.
@@ -148,9 +158,9 @@ class Generation:
         except json.JSONDecodeError:
             return {"error": "evaluation failed"}
 
-file_generation = Generation()
-file_generation.read_files()
-file_generation.ask("How do you test API endpoints?")
-file_generation.ask("What is the best programming language for automation?")
-# file_generation.ask("What is the competance and acceptance level?")
-file_generation.ask("What are the requirements for information security risk assessment?")
+# file_generation = Generation()
+# file_generation.read_files()
+# file_generation.ask("How do you test API endpoints?")
+# file_generation.ask("What is the best programming language for automation?")
+# # file_generation.ask("What is the competance and acceptance level?")
+# file_generation.ask("What are the requirements for information security risk assessment?")

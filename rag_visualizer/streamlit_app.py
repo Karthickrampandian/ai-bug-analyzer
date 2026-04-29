@@ -57,10 +57,31 @@ display_results(Generation(chunk_size=200, overlap=50), question, tab200)
 with tabMeta:
     if st.button("Ask", key="btn_meta"):
         if question:
-            gen_meta = Generation(chunk_size=500, overlap=80)
-            gen_meta.read_files(skip_pages=4)
-            st.metric("Total Chunks:", gen_meta.collection.count())
-            result = gen_meta.ask(question)
+            gen_seman = Generation(chunk_size=500, overlap=80)
+            gen_seman.read_files()
+            st.metric("Total Chunks:", gen_seman.collection.count())
+            result = gen_seman.ask(question)
+            st.write("**Answer:**", result["answer"])
+            st.write("**Confidence:**", result["confidence"])
+            eval_data = result["evaluation"]
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Faithfulness", eval_data.get('faithfulness'))
+            col2.metric("Context Precision", eval_data.get('context_precision'))
+            col3.metric("Answer Relevance", eval_data.get('context_relevance'))
+            st.info(eval_data.get("reason", ""))
+            st.subheader("Retrieved Chunks")
+            for chunk in result["chunks"]:
+                with st.expander(
+                        f"Chunk {chunk['chunk_number']} - {chunk['source']} (distance: {chunk['distance']:.4f})"):
+                    st.write(chunk["text"])
+
+with tabSemantic:
+    if st.button("Ask", key="btn_semantic"):
+        if question:
+            gen_seman = Generation(mode="semantic")
+            gen_seman.read_files(skip_pages=4)
+            st.metric("Total Chunks:", gen_seman.collection.count())
+            result = gen_seman.ask(question)
             st.write("**Answer:**", result["answer"])
             st.write("**Confidence:**", result["confidence"])
             eval_data = result["evaluation"]

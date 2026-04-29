@@ -1,13 +1,17 @@
 import os
 import json
+import re
+
 from pypdf import PdfReader
 import anthropic
 import chromadb
 
 class Generation:
-    def __init__(self,chunk_size=500, overlap=80):
+    def __init__(self,chunk_size=500, overlap=80,mode="fixed"):
         self.chunk_size = chunk_size
         self.overlap = overlap
+        self.mode = mode
+
         self.txt_folder = "txtDocuments"
         self.pdf_folder = "pdfDocuments"
         self.chroma = chromadb.PersistentClient(path="./chroma_db")
@@ -27,14 +31,39 @@ class Generation:
             print(f"{start} - {end} - {len(text)} - {self.overlap}")
         return chunks
 
+    def semantic_chunking(self,text):
+        pattern = r'\n(?=\d+\.?\d*\s+[A-Z])'
+        sections= re.split(pattern, text)
+        print(f"Sections found: {len(sections)}")
+        chunks = [s.strip() for s in sections if len(s.strip())>100]
+        print(f"Chunks after filtering: {len(chunks)}")
+        return chunks
+
     def read_files(self,skip_pages = 0):
-        self.chroma.delete_collection(f"rag_{self.chunk_size}")
-        self.collection = self.chroma.get_or_create_collection(f"rag_{self.chunk_size}")
+        collection_name = f"rag_{self.chunk_size}" if self.mode == "fixed" else "rag_semantic"
+        try:
+            self.chroma.delete_collection(collection_name)
+        except Exception:
+            pass  # collection doesn't exist yet, that's fine
+        self.collection = self.chroma.get_or_create_collection(collection_name)
         self.read_txt_files()
-        if skip_pages > 0:
+        if self.mode == "semantic":
+            self.read_pdf_semantic()
+        elif skip_pages > 0:
             self.read_pdf_with_metadata_filter(skip_pages)
         else:
             self.read_pdf_files()
+
+    def read_pdf_semantic(self):
+        for filename in os.listdir(self.pdf_folder):
+            if filename.endswith(".pdf"):
+                reader = PdfReader(f"{self.pdf_folder}/{filename}")
+                content = ""
+                for page in reader.pages:
+                    content += page.extract_text()
+                chunks = self.semantic_chunking(content)
+                self.store_chunks(filename, chunks)
+                print(f"---{filename} - {len(chunks)} chunks ---")
 
     def read_txt_files(self):
         for filename in os.listdir(self.txt_folder):

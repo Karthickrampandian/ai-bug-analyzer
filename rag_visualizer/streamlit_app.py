@@ -21,8 +21,8 @@ if upload_file is not None:
     st.success(f"Uploaded {upload_file.name}")
 
 question = st.text_input("Ask a question?")
-tab500, tab200, tabMeta, tabSemantic, tabCache = st.tabs([
-    "500 Chars", "200 Chars", "Metadata Filtering", "Semantic Chunking", "Semantic Caching"
+tab500, tab200, tabMeta, tabSemantic, tabHybrid = st.tabs([
+    "500 Chars", "200 Chars", "Metadata Filtering", "Semantic Chunking", "Hybrid Chunking",
 ])
 
 def display_results(gen, question, tab):
@@ -95,3 +95,17 @@ with tabSemantic:
                 with st.expander(
                         f"Chunk {chunk['chunk_number']} - {chunk['source']} (distance: {chunk['distance']:.4f})"):
                     st.write(chunk["text"])
+
+    with tabHybrid:
+        if st.button("Ask", key="btn_hybrid"):
+            if question:
+                gen_hybrid = Generation(chunk_size=500, overlap=80)
+                gen_hybrid.read_files()
+                top3 = gen_hybrid.bm25(question)
+                # Build context from top3
+                context = "\n".join([doc for score, id, doc in top3])
+
+                st.subheader("Hybrid Retrieved Chunks")
+                for i, (score, chunk_id, doc) in enumerate(top3):
+                    with st.expander(f"Chunk {i + 1} - {chunk_id} (hybrid score: {score:.4f})"):
+                        st.write(doc)

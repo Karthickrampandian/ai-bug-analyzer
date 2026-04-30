@@ -5,6 +5,8 @@ import re
 from pypdf import PdfReader
 import anthropic
 import chromadb
+from rank_bm25 import BM25Okapi
+
 
 class Generation:
     def __init__(self,chunk_size=500, overlap=80,mode="fixed"):
@@ -169,6 +171,41 @@ class Generation:
                 for i in range(len(results["documents"][0]))
             ]
         }
+
+    def bm25(self,question,alpha=0.7):
+        all_docs = self.collection.get(include=["documents"])
+        documents = all_docs["documents"]
+        ids = all_docs["ids"]
+
+        tokenized_docs = [doc.lower().split() for doc in documents]
+        bm25 = BM25Okapi(tokenized_docs)
+        bm25_scores = bm25.get_scores(question.lower().split())
+
+        semantic_search = self.collection.query(query_texts=[question],n_results=len(documents),
+                                                include=["documents","distances"])
+        semantic_distances =semantic_search["distances"][0]
+        semantic_ids = semantic_search["ids"][0]
+        sem_dict = dict(zip(semantic_ids, semantic_distances))
+        semantic_distances_ordered = [sem_dict.get(id, 2.0) for id in ids]
+        bm_normalise = self.normalize(bm25_scores)
+        semantic_sim = [1-d for d in semantic_distances_ordered]
+        semantic_normalise = self.normalize(semantic_sim)
+
+        hybrid_scores = [alpha * s + (1-alpha)*b
+                         for s,b in zip(semantic_normalise,bm_normalise)]
+
+        scored = list(zip(hybrid_scores,ids,documents))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top3 = scored[:3]
+        return top3
+
+    def normalize(self,score):
+        max_s = max(score)
+        min_s = min(score)
+        if max_s == min_s:
+            return [1.0] * len(score)
+
+        return [(s - min_s) / (max_s - min_s) for s in score]
 
     def analyse_response(self, question, context, answer):
         eval_prompt = f""" You are a RAG evaluation expert.

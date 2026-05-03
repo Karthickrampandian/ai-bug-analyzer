@@ -1,6 +1,7 @@
 import os
 import json
 import re
+from sentence_transformers import CrossEncoder
 
 from pypdf import PdfReader
 import anthropic
@@ -13,6 +14,9 @@ class Generation:
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.mode = mode
+        self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+
+        self.threshold = 1.2
 
         self.txt_folder = "txtDocuments"
         self.pdf_folder = "pdfDocuments"
@@ -22,6 +26,23 @@ class Generation:
         self.llm = anthropic.Anthropic(api_key=self.api_key)
         self.model = "claude-haiku-4-5-20251001"
         self.max_tokens = 1048
+
+    def query_classification(self,question):
+        q = question.lower()
+
+        if "what is" in q or "define" in q:
+            return "definition"
+        elif "how" in q:
+            return "procedural"
+        elif "why" in q:
+            return "reasoning"
+        else:
+            return "factual"
+
+    def rewrite_question(self,question,question_type):
+        if question_type == "definition":
+            return question + " in ISO 27001"
+        return question
 
     def chunk_text(self, text):
         chunks = []
@@ -131,46 +152,206 @@ class Generation:
             print(f" Distance: {result['distances'][0][i]:.4f}")
             print(f" Text: {result['documents'][0][i][:100]}...")
 
+    def deduplicate(self,docs, metadatas,distances):
+        seen = set()
+        unique_docs = []
+        unique_meta = []
+        unique_dist = []
+
+        for doc, meta, dist in zip(docs, metadatas, distances):
+            key = (doc[:200], meta["source"], meta["chunk"])  # simple similarity check
+            if key not in seen:
+                seen.add(key)
+                unique_docs.append(doc)
+                unique_meta.append(meta)
+                unique_dist.append(dist)
+
+        return unique_docs, unique_meta, unique_dist
+
     def ask(self, question):
+        #Understand Question
+        question_type = self.query_classification(question)
+        question = self.rewrite_question(question,question_type)
+        top_k = self.top_k_count(question_type)
+
+        #retrieve candidates
+        queries = [question] + self.expand_query(question, question_type)
+
+        all_docs, all_meta, all_dist = [], [], []
+
+        for q in queries:
+            res = self.retrieve(q, top_k=top_k)
+            all_docs.extend(res["documents"])
+            all_meta.extend(res["metadatas"])
+            all_dist.extend(res["distances"])
+
+        docs, metadatas, distances = self.deduplicate(all_docs, all_meta, all_dist)
+
+        if not docs:
+            return self.no_response_return()
+
+        #Confidence layer
+        top_distance = float(distances[0])
+        if top_distance > 1.2:
+            confidence = "low"
+        elif top_distance > 0.6:
+            confidence = "medium"
+        else:
+            confidence = "high"
+
+        #rerank
+        reranked = self.rerank(question, docs,  metadatas, distances)
+        if not reranked:
+            return self.no_response_return()
+
+        threshold = self.threshold
+        if reranked:
+            if question_type == "definition" and reranked[0]["score"] < 0:
+                print("Relaxing threshold for definition question")
+                threshold = 1.5
+
+        if top_distance > threshold:
+            return self.no_response_return()
+
+        #Context Building - generation layer
+        context = self.build_context(reranked)
+
+        #llm reasoning layer
+        answer = self.llm_generation(question,context)
+        evaluation_response = self.analyse_response(question, context, answer)
+
+        self.log_pipelines({
+            "question": question,
+            "retrieved_docs": docs[:5],
+            "reranked_docs": [r["doc"] for r in reranked],
+            "context": context,
+            "answer": answer
+        })
+
+        retrieved_formatted = {
+            "documents": docs[:5],
+            "distances": distances[:5],
+            "metadatas": metadatas[:5]
+        }
+
+        return self.format_response(
+            answer,confidence,
+            evaluation_response,
+            retrieved_formatted,
+            reranked)
+
+    def retrieve(self, question,top_k=8):
         results = self.collection.query(
-            query_texts=[question], n_results=3, include=["documents", "distances", "metadatas"]
+            query_texts=[question],
+            n_results=top_k,
+            include=["documents", "distances", "metadatas"]
         )
 
-        top_distance = results["distances"][0][0]
-        confidence = "low" if top_distance > 1.0 else "medium" if top_distance > 0.5 else "high"
-        print(results["documents"][0])
-        print(results["distances"][0])
-        context = "\n".join(results["documents"][0])
+        return {
+            "documents":results["documents"][0],
+            "metadatas":results["metadatas"][0],
+            "distances":results["distances"][0]
+        }
 
+    def expand_query(self, question, question_type):
+        if question_type == "definition":
+            return [
+                question,
+                question + " meaning",
+                question + " definition ISO 27001"
+            ]
+        return [question]
+
+    def no_response_return(self):
+        return {
+            "answer": "No relevant information found in the document",
+            "confidence": "low",
+            "evaluation": {},
+            "retrieved_chunks": [],
+            "reranked_chunks": [],
+        }
+
+    def top_k_count(self,question_type):
+        if question_type == "definition":
+            top_k = 12
+        elif question_type == "procedural":
+            top_k = 6
+        else:
+            top_k = 8
+        return top_k
+
+    def rerank(self, question, docs, metadatas, distances):
+        pairs = [(question,doc) for doc in docs]
+        scores = self.cross_encoder.predict(pairs)
+
+        combined = []
+        for i in range(len(docs)):
+            combined.append({
+                "doc":docs[i],
+                "score":scores[i],
+                "distance":distances[i],
+                "metadata":metadatas[i],
+                "index": i
+            })
+
+        ranked = sorted(combined, key = lambda x:x["score"], reverse=True)
+        return ranked[:3]
+
+    def build_context(self,reranked,top_n=3):
+
+        context_parts=[]
+        for i, item in enumerate(reranked[:top_n]):
+            context_parts.append(f"[Source {i+1}]\nDocument: {item['metadata']['source']} \n{item['doc']} ")
+        return "\n\n".join(context_parts)
+
+    def log_pipelines(self, data):
+        with open("rag_logs.json","a") as f:
+            f.write(json.dumps(data) +"\n")
+
+
+    def llm_generation(self,question,context):
         response = self.llm.messages.create(
-        model = self.model,
-        max_tokens = self.max_tokens,
-        system="""Answer the questions based on the provided context provided only. 
-        if the answer is not in the context, say 'I dont have enough information to answer the question'. 
-        Do not use knowledge from outside""",
-        messages = [{
-            "role": "user",
-            "content": f"Context:\n{context}\n\nQuestion:\n{question}\nAnswer based only on the context provided.",
-        }])
-        print(f"Confidence: {confidence} (distance: {top_distance:.4f})")
-        print(f"Response: {response.content[0].text}")
-        answer = response.content[0].text
-        evaluation_response = self.analyse_response(question, context, answer)
+            model=self.model,
+            max_tokens=self.max_tokens,
+            system="""You must answer only from the provided context.
+            If the answer is not explicitly stated, say "I don't have enough information"
+            Always:
+            - Quote the supporting sentence
+            - Do not infer beyond the context""",
+            messages=[{
+                "role": "user",
+                "content": f"Context:\n{context}\n\nQuestion:\n{question}\nAnswer based only on the context provided.",
+            }])
+        return response.content[0].text
+
+    def format_response(self,answer,confidence,evaluation,retrieved,reranked):
         return {
             "answer": answer,
             "confidence": confidence,
-            "distance": top_distance,
-            "evaluation": evaluation_response,
-            "chunks":[
+            "evaluation": evaluation,
+
+            "retrieved_chunks": [
                 {
-                    "text":results["documents"][0][i],
-                    "distance":results["distances"][0][i],
-                    "source":results["metadatas"][0][i].get("source","unknown"),
-                    "chunk_number":results["metadatas"][0][i].get('chunk',i)
+                    "text": retrieved["documents"][i],
+                    "distance": retrieved["distances"][i],
+                    "source": retrieved["metadatas"][i].get("source", "unknown"),
+                    "chunk_number": retrieved["metadatas"][i].get("chunk", i)
                 }
-                for i in range(len(results["documents"][0]))
+                for i in range(len(retrieved["documents"]))
+            ],
+
+            "reranked_chunks": [
+                {
+                    "text": item["doc"],
+                    "score": item["score"],  # cross-encoder score
+                    "distance": item["distance"],
+                    "source": item["metadata"].get("source", "unknown"),
+                    "chunk_number": item["metadata"].get("chunk", item["index"])
+                }
+                for item in reranked
             ]
         }
+
 
     def bm25(self,question,alpha=0.7):
         all_docs = self.collection.get(include=["documents"])
@@ -180,14 +361,15 @@ class Generation:
         tokenized_docs = [doc.lower().split() for doc in documents]
         bm25 = BM25Okapi(tokenized_docs)
         bm25_scores = bm25.get_scores(question.lower().split())
+        bm_normalise = self.normalize(bm25_scores)
 
         semantic_search = self.collection.query(query_texts=[question],n_results=len(documents),
-                                                include=["documents","distances"])
+                                              include=["documents","distances"])
+
         semantic_distances =semantic_search["distances"][0]
         semantic_ids = semantic_search["ids"][0]
         sem_dict = dict(zip(semantic_ids, semantic_distances))
         semantic_distances_ordered = [sem_dict.get(id, 2.0) for id in ids]
-        bm_normalise = self.normalize(bm25_scores)
         semantic_sim = [1-d for d in semantic_distances_ordered]
         semantic_normalise = self.normalize(semantic_sim)
 
@@ -198,6 +380,27 @@ class Generation:
         scored.sort(key=lambda x: x[0], reverse=True)
         top3 = scored[:3]
         return top3
+
+    def semantic_cache(self, question):
+        cache_collection = self.chroma.get_or_create_collection("cache")
+
+        if cache_collection.count()>0:
+            cached = cache_collection.query(query_texts=[question],n_results=1,include=["documents","distances","metadatas"])
+
+            if cached["distances"][0][0] <0.15:
+                return cached["metadatas"][0][0]["answer"], True
+
+        result = self.ask(question)
+
+        cache_collection.add(
+            documents=[question],
+            ids=[f"cache_{hash(question)}"],
+            metadatas=[{"answer":result["answer"]}],
+        )
+
+        return result, False
+
+
 
     def normalize(self,score):
         max_s = max(score)

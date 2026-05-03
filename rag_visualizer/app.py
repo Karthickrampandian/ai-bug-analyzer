@@ -2,6 +2,11 @@ import os
 import json
 import re
 from sentence_transformers import CrossEncoder
+from ragas import evaluate
+from ragas.metrics.collections import Faithfulness, AnswerRelevancy
+from datasets import Dataset
+from ragas.llms import LangchainLLMWrapper
+from langchain_anthropic import ChatAnthropic
 
 from pypdf import PdfReader
 import anthropic
@@ -207,7 +212,6 @@ class Generation:
         threshold = self.threshold
         if reranked:
             if question_type == "definition" and reranked[0]["score"] < 0:
-                print("Relaxing threshold for definition question")
                 threshold = 1.5
 
         if top_distance > threshold:
@@ -219,6 +223,7 @@ class Generation:
         #llm reasoning layer
         answer = self.llm_generation(question,context)
         evaluation_response = self.analyse_response(question, context, answer)
+        # evaluation_response = self.ragas_evaluate(question, answer, [item["doc"] for item in reranked])
 
         self.log_pipelines({
             "question": question,
@@ -313,11 +318,18 @@ class Generation:
         response = self.llm.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            system="""You must answer only from the provided context.
-            If the answer is not explicitly stated, say "I don't have enough information"
-            Always:
-            - Quote the supporting sentence
-            - Do not infer beyond the context""",
+                    system="""You are a document assistant. You answer questions strictly from the provided context.
+        
+                    RULES:
+                    - Only use information explicitly stated in the context
+                    - If the answer is not in the context, respond exactly: "I don't have enough information to answer this."
+                    - Always quote the supporting sentence from the context
+                    - Never infer or assume beyond what is written
+                    
+                    FORMAT:
+                    Answer: <your answer here>
+                    Source: <exact quote from context that supports it>
+                    """,
             messages=[{
                 "role": "user",
                 "content": f"Context:\n{context}\n\nQuestion:\n{question}\nAnswer based only on the context provided.",
@@ -401,7 +413,6 @@ class Generation:
         return result, False
 
 
-
     def normalize(self,score):
         max_s = max(score)
         min_s = min(score)
@@ -445,6 +456,26 @@ class Generation:
         except json.JSONDecodeError:
             return {"error": "evaluation failed"}
 
+    def ragas_evaluate(self, question, answer, reranked):
+
+        llm = LangchainLLMWrapper(ChatAnthropic(
+            model="claude-haiku-4-5-20251001",
+            api_key=self.api_key,
+        ))
+
+        data = {
+            "question": [question],
+            "answer": [answer],
+            "contexts":[reranked],
+        }
+
+        dataset = Dataset.from_dict(data)
+        result = evaluate(dataset, metrics = [Faithfulness(llm=llm),AnswerRelevancy(llm=llm)])
+
+        return {
+            "faithfulness":round(result["faithfulness"],2),
+            "answer_relevancy":round(result["answer_relevancy"],2),
+        }
 # file_generation = Generation()
 # file_generation.read_files()
 # file_generation.ask("How do you test API endpoints?")

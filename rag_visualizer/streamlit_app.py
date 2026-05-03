@@ -2,8 +2,6 @@ import streamlit as st
 import os
 from app import Generation
 
-file_generation = Generation()
-
 st.title("RAG Visualizer")
 
 upload_file = st.file_uploader("Upload a document (txt/pdf)",type=["txt","pdf"])

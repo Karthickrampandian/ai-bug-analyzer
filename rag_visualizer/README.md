@@ -69,6 +69,10 @@ Upload a PDF or TXT document, ask a question, and see exactly how the system ret
 
 ## Run Locally
 
+## Deployment
+Deployed on Streamlit Community Cloud
+👉 https://ragvisualizer.streamlit.app
+
 ```bash
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=your_key_here

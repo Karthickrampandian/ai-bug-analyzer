@@ -78,6 +78,8 @@ class Generation:
             self.read_pdf_files()
 
     def read_pdf_semantic(self):
+        if not os.path.exists(self.pdf_folder):
+            return
         for filename in os.listdir(self.pdf_folder):
             if filename.endswith(".pdf"):
                 reader = PdfReader(f"{self.pdf_folder}/{filename}")
@@ -89,6 +91,8 @@ class Generation:
                 print(f"---{filename} - {len(chunks)} chunks ---")
 
     def read_txt_files(self):
+        if not os.path.exists(self.txt_folder):
+            return
         for filename in os.listdir(self.txt_folder):
             if filename.endswith(".txt"):
                 with open(f"{self.txt_folder}/{filename}", "r") as f:
@@ -100,6 +104,8 @@ class Generation:
                     print(f"Chunk {i+1} ({len(chunk)} chars) : {chunk[:50]}")
 
     def read_pdf_files(self):
+        if not os.path.exists(self.pdf_folder):
+            return
         for filename in os.listdir(self.pdf_folder):
             if filename.endswith(".pdf"):
                 reader = PdfReader(f"{self.pdf_folder}/{filename}")
@@ -111,6 +117,8 @@ class Generation:
                 print(f"---{filename} - {len(chunks)} chunks ---")
 
     def read_pdf_with_metadata_filter(self, skip_pages = 4):
+        if not os.path.exists(self.pdf_folder):
+            return
         for file in os.listdir(self.pdf_folder):
             if file.endswith(".pdf"):
                 reader = PdfReader(f"{self.pdf_folder}/{file}")

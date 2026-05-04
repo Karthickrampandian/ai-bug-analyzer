@@ -73,6 +73,9 @@ Upload a PDF or TXT document, ask a question, and see exactly how the system ret
 Deployed on Streamlit Community Cloud
 👉 https://ragvisualizer.streamlit.app
 
+> Note: Free tier deployment may be slow due to shared CPU. 
+> CrossEncoder reranking runs on CPU — recommended to run locally for best performance.
+
 ```bash
 pip install -r requirements.txt
 export ANTHROPIC_API_KEY=your_key_here

@@ -3,10 +3,23 @@ import os
 from app import Generation
 
 st.title("RAG Visualizer")
+st.info("⏳ First query takes 30-60 seconds — CrossEncoder reranking runs on CPU. Subsequent queries are faster.")
 
 upload_file = st.file_uploader("Upload a document (txt/pdf)",type=["txt","pdf"])
 
+if "generators" not in st.session_state:
+    st.session_state.generators = {}
+
+def get_gen(chunk_size, overlap, mode="fixed"):
+    key = f"{mode}_{chunk_size}_{overlap}"
+    if key not in st.session_state.generators:
+        gen = Generation(chunk_size=chunk_size, overlap=overlap, mode=mode)
+        gen.read_files()
+        st.session_state.generators[key] = gen
+    return st.session_state.generators[key]
+
 def render_results(result):
+
     st.write("**Answer:**", result["answer"])
 
     st.metric("Confidence", result.get("confidence","N/A"))
@@ -63,11 +76,11 @@ tab500, tab200, tabMeta, tabSemantic, tabHybrid, tabCache = st.tabs([
     "500 Chars", "200 Chars", "Metadata Filtering", "Semantic Chunking", "Hybrid Chunking","Semantic Cache",
 ])
 
-def display_results(gen, question, tab):
+def display_results(chunk_size, overlap, question, tab):
     with tab:
-        if st.button("Ask", key=f"btn_{gen.chunk_size}_{gen.overlap}"):
+        if st.button("Ask", key=f"btn_{chunk_size}_{overlap}"):
             if question:
-                gen.read_files()
+                gen = get_gen(chunk_size, overlap)
                 st.metric("Total Chunks", gen.collection.count())
                 if gen.collection.count() == 0:
                     st.warning("No documents indexed. Please upload a file first.")
@@ -76,14 +89,13 @@ def display_results(gen, question, tab):
                          result = gen.ask(question)
                          render_results(result)
 
-display_results(Generation(chunk_size=500, overlap=80), question, tab500)
-display_results(Generation(chunk_size=200, overlap=50), question, tab200)
+display_results(500, 80, question, tab500)
+display_results(200, 50, question, tab200)
 
 with tabMeta:
     if st.button("Ask", key="btn_meta"):
         if question:
-            gen_seman = Generation(chunk_size=500, overlap=80)
-            gen_seman.read_files()
+            gen_seman = get_gen(chunk_size=500, overlap=80)
             st.metric("Total Chunks:", gen_seman.collection.count())
             with st.spinner("Retrieving and ranking chunks..."):
                 result = gen_seman.ask(question)
@@ -92,8 +104,7 @@ with tabMeta:
 with tabSemantic:
     if st.button("Ask", key="btn_semantic"):
         if question:
-            gen_seman = Generation(mode="semantic")
-            gen_seman.read_files(skip_pages=4)
+            gen_seman = get_gen(chunk_size=500, overlap=80,mode="semantic")
             st.metric("Total Chunks:", gen_seman.collection.count())
             with st.spinner("Retrieving and ranking chunks..."):
                 result = gen_seman.ask(question)
@@ -102,8 +113,7 @@ with tabSemantic:
 with tabHybrid:
     if st.button("Ask", key="btn_hybrid"):
         if question:
-            gen_hybrid = Generation(chunk_size=500, overlap=80)
-            gen_hybrid.read_files()
+            gen_hybrid  = get_gen(chunk_size=500, overlap=80)
             top_k = gen_hybrid.bm25(question, alpha=0.7)
 
             docs = [doc for score, id, doc in top_k]
@@ -129,8 +139,7 @@ with tabHybrid:
 with tabCache:
     if st.button("Ask", key="btn_cache"):
         if question:
-            gen_cache = Generation(chunk_size=500, overlap=80)
-            gen_cache.read_files()
+            gen_cache  = get_gen(chunk_size=500, overlap=80)
             with st.spinner("Checking cache..."):
                 result, cacheHit = gen_cache.semantic_cache(question)
             if cacheHit:

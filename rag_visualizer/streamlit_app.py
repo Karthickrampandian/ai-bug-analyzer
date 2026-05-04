@@ -72,8 +72,9 @@ def display_results(gen, question, tab):
                 if gen.collection.count() == 0:
                     st.warning("No documents indexed. Please upload a file first.")
                 else:
-                    result = gen.ask(question)
-                    render_results(result)
+                    with st.spinner("Retrieving and ranking chunks..."):
+                         result = gen.ask(question)
+                         render_results(result)
 
 display_results(Generation(chunk_size=500, overlap=80), question, tab500)
 display_results(Generation(chunk_size=200, overlap=50), question, tab200)
@@ -84,8 +85,9 @@ with tabMeta:
             gen_seman = Generation(chunk_size=500, overlap=80)
             gen_seman.read_files()
             st.metric("Total Chunks:", gen_seman.collection.count())
-            result = gen_seman.ask(question)
-            render_results(result)
+            with st.spinner("Retrieving and ranking chunks..."):
+                result = gen_seman.ask(question)
+                render_results(result)
 
 with tabSemantic:
     if st.button("Ask", key="btn_semantic"):
@@ -93,8 +95,9 @@ with tabSemantic:
             gen_seman = Generation(mode="semantic")
             gen_seman.read_files(skip_pages=4)
             st.metric("Total Chunks:", gen_seman.collection.count())
-            result = gen_seman.ask(question)
-            render_results(result)
+            with st.spinner("Retrieving and ranking chunks..."):
+                result = gen_seman.ask(question)
+                render_results(result)
 
 with tabHybrid:
     if st.button("Ask", key="btn_hybrid"):
@@ -128,7 +131,8 @@ with tabCache:
         if question:
             gen_cache = Generation(chunk_size=500, overlap=80)
             gen_cache.read_files()
-            result, cacheHit = gen_cache.semantic_cache(question)
+            with st.spinner("Checking cache..."):
+                result, cacheHit = gen_cache.semantic_cache(question)
             if cacheHit:
                 st.success("Cache HIT")
                 st.write("**Answer:**", result)

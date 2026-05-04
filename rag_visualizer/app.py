@@ -19,7 +19,8 @@ class Generation:
 
         self.txt_folder = "txtDocuments"
         self.pdf_folder = "pdfDocuments"
-        self.chroma = chromadb.PersistentClient(path="./chroma_db")
+        # self.chroma = chromadb.PersistentClient(path="./chroma_db")
+        self.chroma = chromadb.EphemeralClient()
         self.collection = self.chroma.get_or_create_collection(f"rag_{chunk_size}")
         self.api_key = os.environ.get("ANTHROPIC_API_KEY")
         self.llm = anthropic.Anthropic(api_key=self.api_key)

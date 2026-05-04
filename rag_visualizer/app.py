@@ -2,8 +2,6 @@ import os
 import json
 import re
 from sentence_transformers import CrossEncoder
-from langchain_anthropic import ChatAnthropic
-
 from pypdf import PdfReader
 import anthropic
 import chromadb
@@ -457,6 +455,7 @@ class Generation:
         from ragas.metrics.collections import Faithfulness, AnswerRelevancy
         from datasets import Dataset
         from ragas.llms import LangchainLLMWrapper
+        from langchain_anthropic import ChatAnthropic
         llm = LangchainLLMWrapper(ChatAnthropic(
             model="claude-haiku-4-5-20251001",
             api_key=self.api_key,

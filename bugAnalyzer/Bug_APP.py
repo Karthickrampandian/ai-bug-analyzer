@@ -10,6 +10,7 @@ class bug_app:
     def run(self):
 
         global result, solution
+        st.set_page_config(layout="wide")
         st.title("Bug Analyzer")
 
         bug_input = st.date_input("Select Report date")
@@ -43,7 +44,24 @@ class bug_app:
                     code_analysis = solution.get("code_analysis", "")
                     if code_analysis:
                         st.markdown("**🔍 Code Analysis:**")
-                        st.markdown(code_analysis)
+                        if isinstance(code_analysis, dict):
+                            st.write(f"**Bug Location:** {code_analysis.get('bug_location', 'N/A')}")
+                            st.write(f"**Bug Explanation:** {code_analysis.get('explanation', 'N/A')}")
+                            col1,col2 = st.columns(2)
+                            col1.header("**🐛 Buggy Code:**")
+                            buggy = code_analysis.get('bug_code', '').replace('\\n', '\n')
+                            col1.code(buggy, language='javascript')
+
+                            col2.header("**✅ Fixed Code:**")
+                            fixed = code_analysis.get('fix_code', '').replace('\\n', '\n')
+                            col2.code(fixed, language='javascript')
+
+                        if "changed_lines" in code_analysis:
+                            st.write("**📍 What Changed:**")
+                            st.code(code_analysis.get("changed_lines", ""), language='javascript')
+
+                        else:
+                            st.markdown(code_analysis)
                     matched_files = solution.get("matched_files", [])
                     if matched_files:
                         st.markdown("**📁 Files Analyzed:**")

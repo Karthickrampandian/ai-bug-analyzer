@@ -123,6 +123,11 @@ Return ONLY the JSON. Nothing else."""
                 final_result["code_analysis"] = self.analyse_code(summary,source_code)
                 final_result["matched_files"] = [os.path.basename(f) for f in relevant_files]
 
+                if isinstance(final_result["code_analysis"], dict):
+                    final_result["fix_verification"] = (
+                        self.verify_fix( summary,
+            final_result["code_analysis"].get("bug_code", ""),
+            final_result["code_analysis"].get("fix_code", "")))
             self.collection.upsert(
                 documents = [summary],
                 metadatas = [{"severity": final_result.get("severity", ""),
@@ -211,4 +216,38 @@ Return ONLY the JSON. Nothing else."""
                 with open(path, "r") as f:
                     content += f"\n--- {os.path.basename(path)}---\n{f.read()}"
         return content
+
+    def verify_fix(self,summary, bug_code, fix_code):
+        response = self.client.messages.create(
+                 model=self.claude_model,
+                 max_tokens=300,
+                system="""You are a senior code reviewer. You did not code or suggest this fix and 
+                Your task is to analyse the bug code and fix code for the bug summary.
+                Provide response in JSON format ONLY.
+                {
+                "verdict":"APPROVED/NEEDS_REVIEW",
+                "confidence":0-100,
+                "reason":"one line"
+                }
+            
+                Examples:
+                {"verdict":"APPROVED","confidence":85,"reason":"Fix add trim() check which handles whitspace edge case"}
+                Avoid unwanted explanation, analyse the result before rushing to a conclusion.""",
+                messages=
+                   [
+                       {
+                "role":"user",
+                "content": f"Bug Summary: {summary} \n Before fix - {bug_code} \n Fixed Code - {fix_code}"
+                 }
+            ]
+        )
+        raw = response.content[0].text.replace("```json","").replace("```","").strip()
+        self.total_input_tokens += response.usage.input_tokens
+        self.total_output_tokens += response.usage.output_tokens
+        try:
+            return  json.loads(raw)
+        except Exception as e:
+            print(f"JSON parse error: {e}")
+            return {"verdict": "NEEDS_REVIEW", "confidence": 0, "reason": "parse error"}
+
 

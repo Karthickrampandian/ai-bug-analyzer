@@ -62,7 +62,19 @@ class bug_app:
                         if "changed_lines" in code_analysis:
                             st.write("**📍 What Changed:**")
                             st.code(code_analysis.get("changed_lines", ""), language='javascript')
+                            st.write("** Verification **")
+                            st.info(code_analysis.get("fix_verification", ""))
 
+                        fix_verification = solution.get("fix_verification", "")
+                        if fix_verification:
+                            verdict = fix_verification.get("verdict", "N/A")
+                            confidence = fix_verification.get("confidence", "N/A")
+                            reason = fix_verification.get("reason", "N/A")
+
+                            if verdict == "APPROVED":
+                                st.success(f"✅ {verdict} — Confidence: {confidence}% | {reason}")
+                            else:
+                                st.warning(f"⚠️ {verdict} — Confidence: {confidence}% | {reason}")
                         else:
                             st.markdown(code_analysis)
                     matched_files = solution.get("matched_files", [])

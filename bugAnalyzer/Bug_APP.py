@@ -35,9 +35,12 @@ class bug_app:
                     col3.markdown(f"**Component**\n\n {solution.get('component', '')}")
                     st.markdown("**Suggestion:**")
                     suggestions = solution.get("suggestion",[])
-                    if isinstance(suggestions,list):
-                         for s in suggestions:
-                             st.markdown(f"- {s}")
+                    if isinstance(suggestions,dict):
+                         for role,text in suggestions.items():
+                             st.markdown(f"**{role.title()}:** {text}")
+                    elif isinstance(suggestions, list):
+                        for s in suggestions:
+                            st.markdown(f"- {s}")
                     else:
                         st.write(suggestions)
 
@@ -83,6 +86,8 @@ class bug_app:
                 #     mime="text/csv")
             else:
                 st.warning("No bugs found.")
+        st.info(
+            f"Total tokens used — Input: {self.analyser.total_input_tokens} | Output: {self.analyser.total_output_tokens} | Est. cost: ${((self.analyser.total_input_tokens * 0.000015) + (self.analyser.total_output_tokens * 0.000075)):.4f}")
 
         if "bugtable" in st.session_state:
             csv  = st.session_state["bugtable"].to_csv(index=False)

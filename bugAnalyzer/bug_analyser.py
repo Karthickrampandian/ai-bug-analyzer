@@ -6,6 +6,8 @@ import json
 import pandas as pd
 from jira_connector  import jira_connector
 import chromadb
+import logging
+logging.basicConfig(level=logging.DEBUG)
 
 class BugAnalyser:
 
@@ -22,7 +24,7 @@ class BugAnalyser:
         self.bug_list = self.load_bug_Report()
         self.api_key = os.environ.get("ANTHROPIC_API_KEY")
         self.client = anthropic.Anthropic(api_key=self.api_key)
-        self.claude_model = "claude-opus-4-5"
+        self.claude_model = "claude-haiku-4-5-20251001"
         self.tokens = 1024
         self.user_prompt = """Your task is to consider yourself as a Automation architect, You need to go through
         the summary of the bug that is going to be shared from the JIRA report. I want you to go through the bug summary
@@ -39,16 +41,18 @@ class BugAnalyser:
         Ensure to revert the output back in json format only and dont add any additional information or details apart from 
         the bug report."""
 
-        self.file_prompt = """You are a developer. Analyse the bug and source code.
-        Return ONLY this JSON:
-        {
-            "bug_location": "function name and line number",
-            "bug_code": "the COMPLETE function with the bug, properly formatted with newlines",
-            "fix_code": "the COMPLETE fixed function, properly formatted with newlines",
-            "explanation": "one line explanation",
-            "changed_lines": "only the specific lines that changed, before and after"
-        }
-        Return the full function body, not just the changed line."""
+        self.file_prompt =  """You are a developer. Analyse the bug and source code.
+You MUST return ONLY this JSON structure. No explanation. No reasoning. No text before or after.
+
+{
+    "bug_location": "function name and line number",
+    "bug_code": "the COMPLETE function with the bug, properly formatted with newlines",
+    "fix_code": "the COMPLETE fixed function, properly formatted with newlines",
+    "changed_lines": "Before: <old line>\\nAfter: <new line>",
+    "explanation": "one line explanation"
+}
+
+Return ONLY the JSON. Nothing else."""
         self.chroma = chromadb.PersistentClient(path="./bug_vector")
         self.collection = self.chroma.get_or_create_collection("bug_history")
 
@@ -59,6 +63,9 @@ class BugAnalyser:
             "suggestion": "",
             "title": ""
         }
+
+        self.total_input_tokens = 0
+        self.total_output_tokens = 0
 
     def claude_connect(self,bug_input ):
 
@@ -73,9 +80,9 @@ class BugAnalyser:
             if similar_bugs:
                 context="\n\nSimilar past bugs for referenc:\n"
                 context += "\n" .join(f"- {b}" for b in similar_bugs)
-                print(f"Similar bugs found: {similar_bugs}")
+                logging.debug(f"Similar bugs found: {similar_bugs}")
             else:
-                print("No similar bugs yet — first run")
+                logging.debug("No similar bugs yet — first run")
             message = self.client.messages.create(
                     model=self.claude_model,
                     max_tokens=self.tokens,
@@ -89,11 +96,12 @@ class BugAnalyser:
 
             raw_response = message.content[0].text
             raw_response = raw_response.replace("```json", "").replace("```", "").strip()
-
+            self.total_input_tokens += message.usage.input_tokens
+            self.total_output_tokens += message.usage.output_tokens
             try:
                 result = json.loads(raw_response)
             except json.JSONDecodeError:
-                print("Claude didn't return valid json for this bug")
+                logging.debug("Claude didn't return valid json for this bug")
                 result = {}
             final_result = {
                  field: result.get(field.lower(),"N/A")
@@ -104,11 +112,11 @@ class BugAnalyser:
 
             repo_path = "/Users/karthick/Desktop/Learn_Playwright/learningpython/sample-app-web/src"
             all_files = self.get_local_files(repo_path)
-            print(f"Total files found: {len(all_files)}")
-            print(f"Files: {all_files[:5]}")  # show first 5
+            logging.debug(f"Total files found: {len(all_files)}")
+            logging.debug(f"Files: {all_files[:5]}")  # show first 5
 
-            relevant_files = self.identify_relevant_files(final_result,all_files)
-            print(f"Relevant files: {relevant_files}")
+            relevant_files = self.identify_relevant_files(summary,all_files)
+            logging.debug(f"Relevant files: {relevant_files}")
 
             if relevant_files:
                 source_code = self.read_file_content(relevant_files)
@@ -122,11 +130,16 @@ class BugAnalyser:
                 ids = [bug]
             )
             all_bugs[bug] = final_result
+        logging.debug(f"Total tokens — Input: {self.total_input_tokens}, Output: {self.total_output_tokens}")
+        logging.debug(f"=Full Run Total==")
+        logging.debug(f"Input: {self.total_input_tokens}, Output: {self.total_output_tokens}")
+        cost = (self.total_input_tokens * 0.000015) + (self.total_output_tokens * 0.000075)
+        logging.debug(f"Estimated cost: {cost:.4f}")
         return all_bugs
 
     def analyse_code(self, bug_summary, source_code):
         response = self.client.messages.create(
-            model=self.claude_model,
+            model="claude-opus-4-5",
             max_tokens=self.tokens,
             system=self.file_prompt,
             messages=[{
@@ -135,6 +148,10 @@ class BugAnalyser:
             }]
         )
         raw = response.content[0].text.replace("```json", "").replace("```", "").strip()
+        self.total_input_tokens += response.usage.input_tokens
+        self.total_output_tokens += response.usage.output_tokens
+        logging.debug(f"Analyse code input token - {response.usage.input_tokens}")
+        logging.debug(f"Analyse code output token - {response.usage.output_tokens}")
         try:
             return json.loads(raw)
         except:
@@ -160,16 +177,17 @@ class BugAnalyser:
         )
 
         raw = response.content[0].text.replace("```json", "").replace("```", "").strip()
-        print(f"Claude raw response: {raw}")
-
+        logging.debug(f"Claude raw response: {raw}")
+        self.total_input_tokens += response.usage.input_tokens
+        self.total_output_tokens += response.usage.output_tokens
         match = re.search(r'\[.*\]', raw, re.DOTALL)
-        print(f"Match found: {match}")
+        logging.debug(f"Match found: {match}")
         if match:
 
             try:
                 result = json.loads(match.group())
-                print(f"Parsed result: {result}")
-            except:
+                # print(f"Parsed result: {result}")
+            except Exception as e :
                 print(f"JSON parse error: {e}")
                 result = []
         else:

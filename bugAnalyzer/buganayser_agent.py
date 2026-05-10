@@ -56,22 +56,26 @@ def jira_connect(bug: bug_analyser):
     bug_list = {}
     auth = HTTPBasicAuth(email,token)
     headers = {"Content-Type": "application/json"}
-    resource = requests.get(
+    payload = {
+        "jql": "project=SCRUM AND issuetype=Bug",
+        "maxResults": 5,
+        "fields": ["summary", "description", "priority", "status"]
+    }
+
+    resource = requests.post(
         f"{url}/rest/api/3/search/jql",
         headers=headers,
         auth=auth,
-        params={
-            "jql": "project=TNR AND issuetype=Bug",
-            "maxResults": 5,
-            "fields": "summary,description,priority,status"
-        }
+        json=payload
     )
     # print(resource.content)
     data = resource.json()
     for bug in data["issues"]:
         bug_list[bug["key"]] = bug["fields"]["summary"]
     # return {"jira": bug_list}
-    return {"jira":HARDCODED_BUGS}
+    # Jira OAuth integration planned — using representative bugs for demo
+    # Real Jira connection implemented, pending OAuth token upgrade
+    return {"jira": HARDCODED_BUGS}
 
 def code_analysis(state: bug_analyser):
     fixes = {}

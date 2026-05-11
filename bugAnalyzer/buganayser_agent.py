@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph, START, END
 import os
 import requests
 from requests.auth import HTTPBasicAuth
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.memory import MemorySaver
 import json
 import chromadb
 
@@ -23,7 +23,7 @@ HARDCODED_BUGS = {
 }
 
 chroma = chromadb.PersistentClient("./bug_vector")
-chroma.delete_collection("bug_history")
+# chroma.delete_collection("bug_history")
 collection = chroma.get_or_create_collection("bug_history")
 src = "/Users/karthick/Desktop/Learn_Playwright/learningpython/sample-app-web/src"
 
@@ -244,9 +244,12 @@ builder.add_edge("claude_connect", "analyse_bug")
 builder.add_edge("analyse_bug","code_analysis")
 builder.add_edge("code_analysis", END)
 
-with SqliteSaver.from_conn_string("bug_memory.db") as memory:
-    graph = builder.compile(checkpointer=memory)
-    config = {"configurable":{"thread_id":"bug_session_1"}}
-    graph.invoke({"jira":{},"claude":{},"analyse":{},"code_analysis":""}, config)
+# with SqliteSaver.from_conn_string("bug_memory.db") as memory:
+#     graph = builder.compile(checkpointer=memory)
+#     config = {"configurable":{"thread_id":"bug_session_1"}}
+#     # graph.invoke({"jira":{},"claude":{},"analyse":{},"code_analysis":""}, config)
+
+memory = MemorySaver()
+graph = builder.compile(checkpointer=memory)
 
 

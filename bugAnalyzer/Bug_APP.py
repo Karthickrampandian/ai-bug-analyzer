@@ -1,7 +1,7 @@
 import streamlit as st
 from bug_analyser import BugAnalyser
 import pandas as pd
-from JIRA_Report import JIRA_REPORT
+from buganayser_agent import graph, HARDCODED_BUGS
 
 class bug_app:
 
@@ -13,58 +13,89 @@ class bug_app:
         global result, solution
         st.title("Bug Analyzer")
 
-        bug_input = st.date_input("Select Report date")
-        mode = st.radio("If file exists:", ["Append", "Overwrite"])
+        tab1, tab2 = st.tabs(["Linear Pipeline","Agent pipelines"])
 
-        if st.button("Verify Bug report"):
-            with st.spinner("Claude is analyzing your bugs... please wait"):
-                result = self.analyser.claude_connect(bug_input)
+        with tab1:
 
-            rows = []
-            for bug_ID, solution in result.items():
-                with st.expander(f"{bug_ID} - {solution.get('title', '')}"):
-                    similar = solution.get("similar_bugs", [])
-                    if similar:
-                        st.markdown("**🔍 Similar Past Bugs:**")
-                        for s in similar:
-                            st.markdown(f"- {s}")
+            bug_input = st.date_input("Select Report date")
+            mode = st.radio("If file exists:", ["Append", "Overwrite"])
 
-                    col1,col2, col3 = st.columns(3)
-                    col1.metric("Severity",solution.get("severity", ""))
-                    col2.metric("Priority",solution.get("priority", ""))
-                    col3.markdown(f"**Component**\n\n {solution.get('component', '')}")
-                    st.markdown("**Suggestion:**")
-                    suggestions = solution.get("suggestion",[])
-                    if isinstance(suggestions,list):
-                         for s in suggestions:
-                             st.markdown(f"- {s}")
-                    else:
-                        st.write(suggestions)
-                #Build rows for export - OUTSIDE expander
-                if isinstance(solution, dict):
-                    solution["bugID"] = bug_ID
-                    rows.append(solution)
-            if rows:
-                bugtable = pd.DataFrame(rows)
-                st.session_state["bugtable"] = bugtable
+            if st.button("Verify Bug report"):
+                with st.spinner("Claude is analyzing your bugs... please wait"):
+                    result = self.analyser.claude_connect(bug_input)
 
-                # csv = bugtable.to_csv(index=False)
-                # st.download_button(
-                #     label="Download Bug Report",
-                #     data=csv,
-                #     file_name=f"bug_report_{bug_input}.csv",
-                #     mime="text/csv")
-            else:
-                st.write("Error:", solution)
+                rows = []
+                for bug_ID, solution in result.items():
+                    with st.expander(f"{bug_ID} - {solution.get('title', '')}"):
+                        similar = solution.get("similar_bugs", [])
+                        if similar:
+                            st.markdown("**🔍 Similar Past Bugs:**")
+                            for s in similar:
+                                st.markdown(f"- {s}")
 
-        if "bugtable" in st.session_state:
-            csv  = st.session_state["bugtable"].to_csv(index=False)
-            st.download_button(
-                label="⬇️ Download Bug Report",
-                data=csv,
-                file_name=f"bug_report_{bug_input}.csv",
-                mime="text/csv"
-            )
+                        col1,col2, col3 = st.columns(3)
+                        col1.metric("Severity",solution.get("severity", ""))
+                        col2.metric("Priority",solution.get("priority", ""))
+                        col3.markdown(f"**Component**\n\n {solution.get('component', '')}")
+                        st.markdown("**Suggestion:**")
+                        suggestions = solution.get("suggestion",[])
+                        if isinstance(suggestions,list):
+                             for s in suggestions:
+                                 st.markdown(f"- {s}")
+                        else:
+                            st.write(suggestions)
+                    #Build rows for export - OUTSIDE expander
+                    if isinstance(solution, dict):
+                        solution["bugID"] = bug_ID
+                        rows.append(solution)
+                if rows:
+                    bugtable = pd.DataFrame(rows)
+                    st.session_state["bugtable"] = bugtable
+
+                else:
+                    st.write("Error:", solution)
+
+            if "bugtable" in st.session_state:
+                csv  = st.session_state["bugtable"].to_csv(index=False)
+                st.download_button(
+                    label="⬇️ Download Bug Report",
+                    data=csv,
+                    file_name=f"bug_report_{bug_input}.csv",
+                    mime="text/csv"
+                )
+
+        with tab2:
+            if st.button("Run Agent"):
+                with st.spinner("Agent Analysing bugs...."):
+                    config = {"configurable":{"thread_id":"bug_session_1"}}
+                    result = graph.invoke({"jira":{},"claude":{},"analyse":{},"code_analysis":""},
+                                          config)
+
+                    for bug_id, data in result["code_analysis"].items():
+                        with st.expander(f"{bug_id} - {data.get('bug_title', '')}"):
+                            relevant_files = data.get("relevant_files", [])
+                            if relevant_files:
+                                st.markdown("** Relevant files**")
+                                for f in relevant_files:
+                                    st.code(f)
+
+                            fix = data.get("fix", {})
+                            if isinstance(fix, dict):
+                                st.write(f"**Bug location:** {fix.get('bug_location','')}")
+                                st.write(f"**Explanation:** {fix.get('Explanation', '')}")
+
+                                col1,col2 = st.columns(2)
+                                with col1:
+                                    st.write("**Buggy Code**")
+                                    st.code(fix.get("bug_code", "").replace("\\n", "\n"),language="javascript")
+
+                                with col2:
+                                    st.write("** Fixed Code**")
+                                    st.code(fix.get("fixed_code", "").replace("\\n", "\n"),language="javascript")
+
+                            else:
+                                st.write(fix)
+
 
 run = bug_app()
 run.run()

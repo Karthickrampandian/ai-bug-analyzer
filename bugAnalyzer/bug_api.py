@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+import uuid
+
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from buganayser_agent import graph
 
 app = FastAPI()
 
@@ -12,20 +15,27 @@ def health():
 
 @app.post("/analyse")
 def analyse_bugs(request: BugRequest):
-    from buganayser_agent import graph
-    config = {"configurable":{"thread_id":"api_session_1"}}
-    result = graph.invoke(
-        {"jira":{},"claude":{},"analyse":{},"code_analysis":""},
-        config
-    )
-    clean_result = {}
+    thread_id = str(uuid.uuid4())
+    config = {"configurable":{"thread_id":thread_id}}
+    try:
+        result = graph.invoke(
+            {"jira":{},"claude":{},"analyse":{},"code_analysis":""},
+            config
+        )
 
-    for bug_id, data in result["code_analysis"].items():
-        clean_result[bug_id] = {
-            "bug_title": data.get("bug_title"," "),
-            "relevant_files": data.get("relevant_files"," "),
-            "fix": data.get("fix"," "),
-        }
+        if not result:
+            return {"message":"No bugs found","bugs":{}}
 
-    return clean_result
+        clean_result = {}
+        for bug_id, data in result["code_analysis"].items():
+            clean_result[bug_id] = {
+                "bug_title": data.get("bug_title", " "),
+                "relevant_files": data.get("relevant_files", " "),
+                "fix": data.get("fix", " "),
+            }
+        return clean_result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+  
 

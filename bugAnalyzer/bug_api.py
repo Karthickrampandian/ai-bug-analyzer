@@ -1,13 +1,28 @@
 import uuid
+import time
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+
 from buganayser_agent import graph
 
 app = FastAPI()
 
-class BugRequest(BaseModel):
-    project: str = "SCRUM"
+from models import BugRequest
+
+def invoke_with_retry(graph,input_data,config,max_retries=3):
+    for i in range(max_retries):
+        try:
+            return graph.invoke(input_data,config)
+        except Exception as e:
+            if "overloaded" in str(e) or "529" in str(e) :
+                wait = 2 ** i
+                print(f"overloaded. Retrying in {wait} seconds...")
+                time.sleep(wait)
+            else:
+                raise
+
+    raise HTTPException(status_code=503, detail= "AI service temporarily busy. Please try again later.")
+
 
 @app.get("/")
 def health():
@@ -18,7 +33,7 @@ def analyse_bugs(request: BugRequest):
     thread_id = str(uuid.uuid4())
     config = {"configurable":{"thread_id":thread_id}}
     try:
-        result = graph.invoke(
+        result = invoke_with_retry(graph,
             {"jira":{},"claude":{},"analyse":{},"code_analysis":""},
             config
         )

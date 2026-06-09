@@ -23,7 +23,6 @@ HARDCODED_BUGS = {
 }
 
 chroma = chromadb.PersistentClient("./bug_vector")
-# chroma.delete_collection("bug_history")
 collection = chroma.get_or_create_collection("bug_history")
 src = "/Users/karthick/Desktop/Learn_Playwright/learningpython/sample-app-web/src"
 
@@ -42,7 +41,6 @@ bug_details = {
     "severity": "",
     "priority": "",
     "component": "",
-    "suggestion": "",
     "title": ""
 }
 
@@ -51,8 +49,67 @@ class bug_analyser(TypedDict):
     claude:dict
     analyse:str
     code_analysis:dict
+    valid_bugs:dict
 
-def jira_connect(bug: bug_analyser):
+def supervisor(state: bug_analyser):
+    valid_bugs = state.get("valid_bugs",{})
+
+    if not valid_bugs:
+        print("No valid bugs found")
+        return {"valid_bugs":{}}
+
+    p0_p1 = {k:v for k,v in valid_bugs.items() if v.get("severity") in ["P0","P1"]}
+    p2_p3 = {k: v for k, v in valid_bugs.items() if v.get("severity") in ["P2", "P3"]}
+
+    print(f"🔴 Critical (P0/P1): {len(p0_p1)}")
+    print(f"🟡 Low priority (P2/P3): {len(p2_p3)}")
+
+    return {"valid_bugs":valid_bugs}
+
+def route_after_supervisor(state: bug_analyser):
+    valid_bugs = state.get("valid_bugs",{})
+
+    if not valid_bugs:
+        return "end"
+
+    for bug_id, analysis in valid_bugs.items():
+        if analysis.get("severity") in ["P0","P1"]:
+            return "code_agent"
+
+    return "triage_agent"
+
+def triage_agent(state: bug_analyser):
+    valid_bugs = state.get("valid_bugs",{})
+    print("🟡 Triage agent processing low priority bugs...")
+    for bug_id, analysis in valid_bugs.items():
+        print(f"->{bug_id}:{analysis.get('title','')}[{analysis.get('severity')}]")
+
+    return {"analyse":state["analyse"]+ "| Triage complete"}
+
+def code_agent(state: bug_analyser):
+    fixes = {}
+    valid_bugs = state.get("valid_bugs",{})
+    print("🔴 Code agent processing critical bugs...")
+
+    for bug_id, bug in valid_bugs.items():
+        bug_title = bug.get('title','')
+        file_path = get_local_files()
+        relevant_files = identify_relevant_files(bug_title,file_path)
+        fixes[bug_id] = {
+            "relevant_files":relevant_files,
+            "bug_title":bug_title,
+        }
+
+    bug_contents =  read_content(fixes)
+
+    for bug_id, content in bug_contents.items():
+        fixes[bug_id]["source_code"] = content
+        bug_title = fixes[bug_id]["bug_title"]
+        fixes[bug_id]["fix"]= analyse_code(bug_title, content)
+
+    return {"code_analysis":fixes}
+
+def jira_connect(state: bug_analyser):
     bug_list = {}
     auth = HTTPBasicAuth(email,token)
     headers = {"Content-Type": "application/json"}
@@ -77,27 +134,6 @@ def jira_connect(bug: bug_analyser):
     # Real Jira connection implemented, pending OAuth token upgrade
     return {"jira": HARDCODED_BUGS}
 
-def code_analysis(state: bug_analyser):
-    fixes = {}
-    for bug_id, bug in state["claude"].items():
-        bug_title = bug.get('title','')
-        file_path = get_local_files()
-        relevant_files = identify_relevant_files(bug_title,file_path)
-        fixes[bug_id]= {
-            "relevant_files":relevant_files,
-            "bug_title":bug_title,
-        }
-
-    bug_contents = read_content(fixes)
-
-    for bug_id, content in bug_contents.items():
-        fixes[bug_id]["source_code"] = content
-        bug_title = fixes[bug_id]["bug_title"]
-
-        fixes[bug_id]["fix"] = analyse_code(bug_title, content)
-
-    return {"code_analysis": fixes}
-
 def get_local_files():
     file_list = []
     extension_files = [".js",".ts",".jsx",".tsx"]
@@ -107,10 +143,10 @@ def get_local_files():
             if any(file.endswith(ext) for ext in extension_files) and ".tests." not in file and ".stories." not in file:
                 file_path = os.path.join(root,file)
                 file_list.append(file_path)
-    fila_path=""
+    file_path_str=""
     for file_path in file_list:
-        fila_path += f"\n{join(file_path)}"
-    return fila_path
+        file_path_str += f"\n{join(file_path)}"
+    return file_path_str
 
 def identify_relevant_files(summary,filepath):
     response = client.messages.create(
@@ -135,7 +171,7 @@ def identify_relevant_files(summary,filepath):
         try:
             result = json.loads(match.group())
             return result.get("files_impacted",[])
-        except:
+        except json.JSONDecodeError:
             print(f"JSON failed for {filepath}")
             return []
     return []
@@ -175,7 +211,7 @@ def analyse_code(bug_title, source_code):
     try:
         result = json.loads(raw)
         return result
-    except:
+    except json.JSONDecodeError:
         return raw
 
 def route_after_jira(state: bug_analyser):
@@ -201,8 +237,10 @@ def claude_connect(state: bug_analyser):
             print(f"JSON failed for {bug_id}")
             result = {}
         final_result = {
-                 field: result.get(field.lower(),"N/A")
-                for field in bug_details}
+                 field: result.get(field.lower(),"N/A")for field in bug_details}
+        # if bug_id == "SCRUM-10":
+        #     final_result["severity"] = "P1"
+
         all_bugs[bug_id] = final_result
     return {"claude": all_bugs}
 
@@ -214,10 +252,11 @@ def analyse_bug(state: bug_analyser):
         title = analysis.get("title", "")
 
         similar = collection.query(query_texts=[title], n_results=2)
-        similar_bugs = similar["documents"][0] if len(similar["documents"]) > 0 else []
+        distances = similar["distances"][0] if similar["distances"] else []
+        documents = similar["documents"][0] if similar["documents"] else []
 
-        if similar_bugs:
-            duplicate_bugs[bug] = similar_bugs
+        if distances and distances[0] <0.3 and documents:
+            duplicate_bugs[bug] = analysis
         else:
             valid_bugs[bug] = analysis
 
@@ -230,26 +269,36 @@ def analyse_bug(state: bug_analyser):
     print(f"✅ Valid: {len(valid_bugs)} bugs")
     print(f"⚠️ Duplicates: {len(duplicate_bugs)} bugs")
 
-    return {"analyse": f"Valid:{len(valid_bugs)} Duplicates:{len(duplicate_bugs)}"}
+    return {"analyse": f"Valid:{len(valid_bugs)} Duplicates:{len(duplicate_bugs)}",
+            "valid_bugs": valid_bugs,}
 
 builder = StateGraph(bug_analyser)
 builder.add_node("jira_connect", jira_connect)
 builder.add_node("claude_connect", claude_connect)
 builder.add_node("analyse_bug", analyse_bug)
-builder.add_node("code_analysis", code_analysis)
+builder.add_node("supervisor",supervisor)
+builder.add_node("code_agent",code_agent)
+builder.add_node("triage_agent",triage_agent)
+
 
 builder.add_edge(START,"jira_connect")
 builder.add_conditional_edges("jira_connect",route_after_jira,{"no_bugs":END,"analyse":"claude_connect"})
 builder.add_edge("claude_connect", "analyse_bug")
-builder.add_edge("analyse_bug","code_analysis")
-builder.add_edge("code_analysis", END)
+builder.add_edge("analyse_bug","supervisor")
+builder.add_conditional_edges("supervisor",
+                              route_after_supervisor,
+                              {"code_agent":"code_agent", "triage_agent":"triage_agent","end":END})
 
-# with SqliteSaver.from_conn_string("bug_memory.db") as memory:
-#     graph = builder.compile(checkpointer=memory)
-#     config = {"configurable":{"thread_id":"bug_session_1"}}
-#     # graph.invoke({"jira":{},"claude":{},"analyse":{},"code_analysis":""}, config)
+builder.add_edge("code_agent",END)
+builder.add_edge("triage_agent",END)
 
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
 
 
+if __name__ == "__main__":
+    config = {"configurable":{"thread_id":"bug_session_1"}}
+    result = graph.invoke({"jira":{},"claude":{},"analyse":{},
+                           "code_analysis":{},"valid_bugs":{}},
+                          config)
+    print(result)

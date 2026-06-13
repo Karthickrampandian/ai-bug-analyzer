@@ -10,12 +10,15 @@ from requests.auth import HTTPBasicAuth
 from langgraph.checkpoint.memory import MemorySaver
 import json
 import chromadb
+import asyncio
+
 
 url = os.environ.get("JIRA_URL")
 email = os.environ.get("JIRA_EMAIL")
 token = os.environ.get("JIRA_TOKEN")
 api_key = os.environ.get("ANTHROPIC_API_KEY")
 client = anthropic.Anthropic(api_key=api_key)
+async_client = anthropic.AsyncAnthropic(api_key=api_key)
 HARDCODED_BUGS = {
     "SCRUM-10": "Login page accepts empty username without specific validation message",
     "SCRUM-11": "Cart badge count does not update immediately when item is removed",
@@ -220,29 +223,32 @@ def route_after_jira(state: bug_analyser):
     else:
         return "analyse"
 
-def claude_connect(state: bug_analyser):
+async def claude_connect(state: bug_analyser):
     all_bugs = {}
-    for bug_id, summary in state["jira"].items():
-        response = client.messages.create(
-            model="claude-opus-4-5",
-            max_tokens=500,
-            system=user_prompt,
-            messages=[{"role": "user", "content": summary}]
-        )
+    tasks = [analyse_single_bug(bug_id,summary) for bug_id, summary in state["jira"].items()]
+    results = await asyncio.gather(*tasks)
+    return {"claude": dict(results)}
 
-        raw_response = response.content[0].text.replace("```","").replace("json","")
-        try:
-            result = json.loads(raw_response)
-        except json.JSONDecodeError:
-            print(f"JSON failed for {bug_id}")
-            result = {}
-        final_result = {
-                 field: result.get(field.lower(),"N/A")for field in bug_details}
-        # if bug_id == "SCRUM-10":
-        #     final_result["severity"] = "P1"
+async def analyse_single_bug(bug_id:str, summary:str):
+    response = await async_client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=500,
+        system=user_prompt,
+        messages=[{"role": "user", "content": summary}]
+    )
 
-        all_bugs[bug_id] = final_result
-    return {"claude": all_bugs}
+    raw_response = response.content[0].text.replace("```","").replace("json","")
+    try:
+        result = json.loads(raw_response)
+    except json.JSONDecodeError:
+        print(f"JSON failed for {bug_id}")
+        result = {}
+    final_result = {
+        field:result.get(field.lower(),"N/A")for field in bug_details
+    }
+
+    return bug_id, final_result
+
 
 def analyse_bug(state: bug_analyser):
     valid_bugs = {}
@@ -296,9 +302,10 @@ memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
 
 
-if __name__ == "__main__":
+async def run():
     config = {"configurable":{"thread_id":"bug_session_1"}}
-    result = graph.invoke({"jira":{},"claude":{},"analyse":{},
-                           "code_analysis":{},"valid_bugs":{}},
-                          config)
-    print(result)
+    async for chunk in graph.astream(
+            {"jira":{},"claude":{},"analyse":"","code_analysis":{},"valid_bugs":{}},config):
+        print(chunk)
+
+asyncio.run(run())

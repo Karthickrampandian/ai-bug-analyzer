@@ -47,12 +47,30 @@ bug_details = {
     "title": ""
 }
 
+classification_prompt = """You are a senior lead developer, you task it to classify the bugs based on the bug description.
+Rules-
+- UI - Visual mismatch, label changes, field name mismatch, page rendering, form validation
+- API - endpoint failures, response format, authentication, HTTP errors
+- Backend - database, business logic, data processing, server errors 
+
+Output format - 
+{
+"bug_type":"UI/API/DB",
+"bug_summary":"Bug Summary from the input",
+"bug_component":"Component from input"
+}
+No extra information or text, strictly follow json format only.
+"""
+
 class bug_analyser(TypedDict):
-    jira: list
+    jira: dict
     claude:dict
     analyse:str
     code_analysis:dict
     valid_bugs:dict
+    ui_bugs:dict
+    api_bugs:dict
+    db_bugs:dict
 
 def supervisor(state: bug_analyser):
     valid_bugs = state.get("valid_bugs",{})
@@ -249,6 +267,43 @@ async def analyse_single_bug(bug_id:str, summary:str):
 
     return bug_id, final_result
 
+async def bug_classification(state:bug_analyser):
+    tasks = [classify_single_bug(bug_id,f"Title:{bug.get('title','')} component:{bug.get('component','')}") for bug_id, bug in state["valid_bugs"].items()]
+    results = await asyncio.gather(*tasks)
+
+    ui_bugs = {}
+    api_bugs = {}
+    db_bugs = {}
+
+    for bug_Id,classification in results:
+        bug_type = classification.get("bug_type","UI")
+        if bug_type == "UI":
+            ui_bugs[bug_Id] = classification
+        elif bug_type == "API":
+            api_bugs[bug_Id] = classification
+        elif bug_type == "DB":
+            db_bugs[bug_Id] = classification
+
+    return {"ui_bugs": ui_bugs,
+            "api_bugs": api_bugs,
+            "db_bugs": db_bugs}
+
+
+async def classify_single_bug(bug_id:str, summary:str):
+    response = await async_client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=500,
+        system=classification_prompt,
+        messages=[{"role": "user", "content": summary}]
+    )
+
+    raw_response = response.content[0].text.replace("```","").replace("json","")
+    try:
+        result = json.loads(raw_response)
+    except json.JSONDecodeError:
+        print(f"JSON failed for {bug_id}")
+        result = {}
+    return bug_id, result
 
 def analyse_bug(state: bug_analyser):
     valid_bugs = {}
@@ -285,12 +340,14 @@ builder.add_node("analyse_bug", analyse_bug)
 builder.add_node("supervisor",supervisor)
 builder.add_node("code_agent",code_agent)
 builder.add_node("triage_agent",triage_agent)
+builder.add_node("bug_classification",bug_classification)
 
 
 builder.add_edge(START,"jira_connect")
 builder.add_conditional_edges("jira_connect",route_after_jira,{"no_bugs":END,"analyse":"claude_connect"})
 builder.add_edge("claude_connect", "analyse_bug")
-builder.add_edge("analyse_bug","supervisor")
+builder.add_edge("analyse_bug","bug_classification")
+builder.add_edge("bug_classification","supervisor")
 builder.add_conditional_edges("supervisor",
                               route_after_supervisor,
                               {"code_agent":"code_agent", "triage_agent":"triage_agent","end":END})
@@ -305,7 +362,7 @@ graph = builder.compile(checkpointer=memory)
 async def run():
     config = {"configurable":{"thread_id":"bug_session_1"}}
     async for chunk in graph.astream(
-            {"jira":{},"claude":{},"analyse":"","code_analysis":{},"valid_bugs":{}},config):
+            {"jira":{},"claude":{},"analyse":"","code_analysis":{},"valid_bugs":{},"ui_bugs":{},"api_bugs":{},"db_bugs":{}},config):
         print(chunk)
 
 asyncio.run(run())

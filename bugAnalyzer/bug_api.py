@@ -3,11 +3,10 @@ import time
 
 from fastapi import FastAPI, HTTPException
 
-from buganayser_agent import graph
+from graph import graph
+from models.state import bug_analyser
 
 app = FastAPI()
-
-from models import BugRequest
 
 def invoke_with_retry(graph,input_data,config,max_retries=3):
     for i in range(max_retries):
@@ -29,7 +28,7 @@ def health():
     return {"status": "ok"}
 
 @app.post("/analyse")
-def analyse_bugs(request: BugRequest):
+def analyse_bugs(request: bug_analyser):
     thread_id = str(uuid.uuid4())
     config = {"configurable":{"thread_id":thread_id}}
     try:

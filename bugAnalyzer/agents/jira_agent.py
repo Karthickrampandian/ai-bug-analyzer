@@ -5,6 +5,10 @@ from requests.auth import HTTPBasicAuth
 
 
 def jira_connect(state:bug_analyser):
+    if not JIRA_URL:
+        print("⚠️ No Jira URL — using hardcoded bugs")
+        return {"jira": HARDCODED_BUGS}
+
     bug_list = {}
     auth = HTTPBasicAuth(JIRA_EMAIL, JIRA_TOKEN)
     headers = {"content-type": "application/json"}
@@ -18,4 +22,5 @@ def jira_connect(state:bug_analyser):
 
     for bug in data["issues"]:
         bug_list[bug["id"]] = bug["fields"]["summary"]
+
     return {"jira":HARDCODED_BUGS}

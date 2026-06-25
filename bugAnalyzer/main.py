@@ -7,12 +7,12 @@ async def main():
             {"jira":{},
              "claude":{},
              "analyse":"",
-             "valid_bugs":{},
-             "ui_bugs":{},
-             "api_bugs":{},
-             "db_bugs":{}},
+             "valid_bugs":{}},
             config):
         print(chunk)
 
 asyncio.run(main())
 
+# "ui_bugs":{},
+# "api_bugs":{},
+# "db_bugs":{}},

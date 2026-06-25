@@ -23,18 +23,22 @@ def get_local_files():
 def identify_local_files(bug_summary:str, filepath:str):
     response = client.messages.create(
         model="claude-opus-4-5",
-        max_tokens=500,
+        max_tokens=1024,
         system=FILE_IDENTIFICATION,
         messages=[{"role":"user","content":f"Bug summary:{bug_summary} \n Filepath:{filepath}"}]
     )
 
+
     raw_response = response.content[0].text.replace('```','').replace('json','')
-    match = re.search(r'\{.*\}',raw_response,re.DOTALL)
+    print(f"RAW RESPONSE: {repr(raw_response)}")  # ← moved here, always runs
+    print(f"FILEPATH SENT: {repr(filepath)}")
+    match = re.search(r'\{.*?\}',raw_response,re.DOTALL)
     if match:
         try:
             result = json.loads(match.group())
-            return result.get("files",[])
+            return result.get("files_impacted",[])
         except json.JSONDecodeError:
+            print(f"RAW RESPONSE: {raw_response}")
             print(f"Json is not valid for - {bug_summary}")
             return []
     return []
@@ -88,6 +92,15 @@ def code_agent(state:bug_analyser):
     for bug_id,content in bug_contents.items():
         fixes[bug_id]["source_code"] = content
         bug_title = fixes[bug_id]["bug_title"]
+
+        if not fixes[bug_id]["relevant_files"]:
+            fixes[bug_id]["fix"] ={
+                "bug_location":"INSUFFICIENT_CONTEXT",
+                "bug_code":"N/A",
+                "fixed_code":"N/A",
+                "Explanation":"No relevant source files were identified for this bug. A fix was not generated to avoid producing an unverified, speculative code change"
+            }
+            continue
         fixes[bug_id]["fix"] = analyse_code(bug_title,content)
 
     return {'code_analysis':fixes}

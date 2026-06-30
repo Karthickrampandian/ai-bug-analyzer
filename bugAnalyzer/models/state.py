@@ -9,3 +9,5 @@ class bug_analyser(TypedDict):
     ui_bugs: dict
     api_bugs: dict
     db_bugs: dict
+    retry_count:dict
+    retry_bugs:dict

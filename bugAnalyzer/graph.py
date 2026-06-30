@@ -10,6 +10,8 @@ from agents.analyse_bug import analyse_bug
 from agents.supervisor import supervisor
 from agents.code_agent import code_agent
 from agents.triage_agent import triage_agent
+from agents.github_agent import github_agent
+from agents.verify_agent import verify_agent
 import asyncio
 
 def route_after_jira(state:bug_analyser):
@@ -28,14 +30,27 @@ def route_after_supervisor(state:bug_analyser):
             return "code_agent"
     return "triage_agent"
 
+def route_after_verify(state:bug_analyser):
+    retry_bugs = state.get("retry_bugs",{})
+    code_analysis = state.get("code_analysis",{})
+    if not retry_bugs:
+        if code_analysis:
+            return "github_agent"
+        return "end"
+    else:
+        return "code_agent"
+
 builder =StateGraph(bug_analyser)
 
 builder.add_node("jira_connect",jira_connect,retry_policy=RetryPolicy(max_attempts=3))
 builder.add_node("claude_connect",claude_connect,retry_policy=RetryPolicy(max_attempts=3))
 builder.add_node("analyse_bug",analyse_bug)
 builder.add_node("code_agent",code_agent,retry_policy=RetryPolicy(max_attempts=3))
+builder.add_node("verify_agent",verify_agent)
 builder.add_node("triage_agent",triage_agent)
 builder.add_node("supervisor",supervisor)
+builder.add_node("github_agent",github_agent)
+# builder.add_edge("code_agent",END)
 # builder.add_node("bug_classification",bug_classification,retry_policy=RetryPolicy(max_attempts=3))
 
 builder.add_edge(START,"jira_connect")
@@ -49,7 +64,17 @@ builder.add_conditional_edges("supervisor",route_after_supervisor,
                  {"code_agent": "code_agent",
                   "triage_agent":"triage_agent","end":END})
 
-builder.add_edge("code_agent",END)
+builder.add_edge("code_agent","verify_agent")
+
+builder.add_conditional_edges("verify_agent",route_after_verify,
+                              {
+                                  "github_agent":"github_agent",
+                                  "code_agent":"code_agent",
+                                  "end":END
+                              })
+
+builder.add_edge("github_agent", END)
+
 builder.add_edge("triage_agent",END)
 
 memory = MemorySaver()

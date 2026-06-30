@@ -7,6 +7,10 @@ JIRA_URL = os.environ.get('JIRA_URL')
 JIRA_EMAIL = os.environ.get('JIRA_EMAIL')
 JIRA_TOKEN = os.environ.get('JIRA_TOKEN')
 
+GITHUB_PAT = os.environ.get('GITHUB_PAT_BUG_ANALYZER')
+GITHUB_REPO_OWNER = os.environ.get("GITHUB_REPO_OWNER")
+GITHUB_REPO_NAME= os.environ.get("GITHUB_REPO_NAME")
+
 #Anthropic Key
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)

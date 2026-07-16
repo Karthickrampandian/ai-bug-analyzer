@@ -32,7 +32,9 @@ collection = chroma.get_or_create_collection(COLLECTION_NAME)
 HARDCODED_BUGS = {
     "SCRUM-10": "Login page accepts empty username without specific validation message",
     "SCRUM-11": "Cart badge count does not update immediately when item is removed",
-    "SCRUM-12": "Checkout form allows submission with empty first name field"
+    "SCRUM-12": "Checkout form allows submission with empty first name field",
+    "SCRUM-13": "Payment gateway timeout causes duplicate charges on checkout",
+    "SCRUM-14": "Kubernetes pod autoscaling fails to scale down after traffic spike"
 }
 
 # Prompts
@@ -98,7 +100,8 @@ output -
 "bug_location" : "Function from the source code whether bug resides in" , 
 "bug_code" : "Which code is causing that bug?", 
 "fixed_code":"What is the fix that is suggested by claude along with the code?", 
-"Explanation":"Why claude suggested that fix? Is it efficient/good fix?"
+"Explanation":"Why claude suggested that fix? Is it efficient/good fix?",
+"file_path":"Copy the exact path shown in the ---path---. Avoid any other unnecessary data or details."  
 }
 
 Output should be strictly in JSON format only. Analyse your response before coming to a conclusion."""

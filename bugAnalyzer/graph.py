@@ -40,6 +40,12 @@ def route_after_verify(state:bug_analyser):
     else:
         return "code_agent"
 
+def route_after_github(state:bug_analyser):
+    retry_bugs = state.get("retry_bugs",{})
+    if retry_bugs:
+        return "code_agent"
+    return "end"
+
 builder =StateGraph(bug_analyser)
 
 builder.add_node("jira_connect",jira_connect,retry_policy=RetryPolicy(max_attempts=3))
@@ -73,7 +79,8 @@ builder.add_conditional_edges("verify_agent",route_after_verify,
                                   "end":END
                               })
 
-builder.add_edge("github_agent", END)
+builder.add_conditional_edges("github_agent", route_after_github,
+    {"code_agent": "code_agent", "end": END})
 
 builder.add_edge("triage_agent",END)
 

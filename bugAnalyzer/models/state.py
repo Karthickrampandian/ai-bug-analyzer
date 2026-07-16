@@ -11,3 +11,5 @@ class bug_analyser(TypedDict):
     db_bugs: dict
     retry_count:dict
     retry_bugs:dict
+    human_reject_count: dict
+    invalid_bugs: dict

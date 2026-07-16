@@ -58,12 +58,17 @@ def read_content(bugs:dict):
         bug_content[bug_id] = files
     return bug_content
 
-def analyse_code(bug_title:str, source_code:str):
+def analyse_code(bug_title:str, source_code:str, previous_fix = None):
+    if previous_fix:
+        content = f"Bug title:{bug_title} \n Source code:{source_code} \n Previous attempted fix: {previous_fix} \n This is the fix provided in the last try, strictly think of some other solution and fix"
+    else:
+        content = f"Bug title:{bug_title} \n Source code:{source_code}"
+
     response = client.messages.create(
         model="claude-opus-4-5",
         max_tokens=1024,
         system=CODE_ANALYSIS_PROMPT,
-        messages=[{"role":"user","content":f"Bug title:{bug_title} \n Source code:{source_code}"}]
+        messages=[{"role":"user","content":content}]
     )
 
     raw_response = response.content[0].text.replace('```','').replace('json','')
@@ -72,11 +77,16 @@ def analyse_code(bug_title:str, source_code:str):
         results=json.loads(raw_response)
     except json.JSONDecodeError:
         print(f"Json is not valid for - {bug_title}")
-        return []
+        invalid_bug = {
+            "bug_location": "JSON_PARSE_ERROR",
+            "bug_code": "N/A",
+            "fixed_code": "N/A",
+            "Explanation": "JSON Parsing failed, valid json is not returned for processing"
+        }
+        return invalid_bug
     return results
 
 def code_agent(state:bug_analyser):
-    bugs_to_process = {}
 
     retry_bugs = state.get("retry_bugs",{})
 
@@ -91,30 +101,37 @@ def code_agent(state:bug_analyser):
 
     file_path = get_local_files()
     for bug_id, summary in bugs_to_process.items():
-        bug_title = summary.get("title","")
+        bug_title = summary.get("title") or summary.get("bug_title", "")
+        previous_fix = summary.get("fix", {}).get("fixed_code")
 
         if summary.get("source_code"):
             fixes[bug_id] = {
                 "relevant_files":summary.get("relevant_files"),
                 "bug_title":bug_title,
-                "source_code":summary.get("source_code")
+                "source_code":summary.get("source_code"),
+                "previous_fix":previous_fix,
             }
         else:
             relevant_files = identify_local_files(bug_title,file_path)
             fixes[bug_id] = {
                 "relevant_files": relevant_files,
                 "bug_title": bug_title,
+                "previous_fix": previous_fix,
             }
 
     bugs_needing_files = {bug_id: data for bug_id, data in fixes.items() if not data.get("source_code")}
+    bugs_already_have_source = {bug_id: data for bug_id, data in fixes.items() if data.get("source_code")}
+
     bug_contents = read_content(bugs_needing_files)
 
     for bug_id,content in bug_contents.items():
         fixes[bug_id]["source_code"] = content
-
+        failed_fix = fixes[bug_id]["previous_fix"]
         bug_title = fixes[bug_id]["bug_title"]
 
+
         if not fixes[bug_id]["relevant_files"]:
+            print(f"{bug_id} has insufficient context (no relevant files found) — marked for manual review")
             fixes[bug_id]["fix"] ={
                 "bug_location":"INSUFFICIENT_CONTEXT",
                 "bug_code":"N/A",
@@ -122,17 +139,17 @@ def code_agent(state:bug_analyser):
                 "Explanation":"No relevant source files were identified for this bug. A fix was not generated to avoid producing an unverified, speculative code change"
             }
             continue
-
-        formatted_source = "\n\n".join(f"--{os.path.basename(filepath)}---\n{filecontent}" for filepath, filecontent in content.items())
-        fixes[bug_id]["fix"] = analyse_code(bug_title,formatted_source)
-
-    bugs_already_have_source = {bug_id: data for bug_id, data in fixes.items() if data.get("source_code")}
+        print(f"First attempt of bug fixing in progress for - {bug_id}")
+        formatted_source = "\n\n".join(f"--{filepath}---\n{filecontent}" for filepath, filecontent in content.items())
+        fixes[bug_id]["fix"] = analyse_code(bug_title,formatted_source,failed_fix)
 
     for bug_id, data in bugs_already_have_source.items():
+        print(f"Finding another solution for {bug_id} as previous fix was rejected")
         bug_title = data.get("bug_title")
+        failed_fix = fixes[bug_id]["previous_fix"]
         formatted_source = "\n\n".join(
-            f"--{os.path.basename(filepath)}---\n{content}" for filepath, content in data.get('source_code').items())
-        fixes[bug_id]["fix"] = analyse_code(bug_title, formatted_source)
+            f"--{filepath}---\n{content}" for filepath, content in data.get('source_code').items())
+        fixes[bug_id]["fix"] = analyse_code(bug_title, formatted_source,failed_fix)
 
 
     return {'code_analysis':fixes}
